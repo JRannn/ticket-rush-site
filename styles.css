@@ -331,6 +331,12 @@ input:focus {
   background: var(--ink);
 }
 
+.grab-button:disabled {
+  cursor: not-allowed;
+  color: rgba(255, 255, 255, 0.82);
+  background: #8d8798;
+}
+
 .profile-layout {
   display: grid;
   grid-template-columns: 300px 1fr;
@@ -455,7 +461,7 @@ input:focus {
 
 .admin-panel {
   display: grid;
-  grid-template-columns: 1fr 260px 170px;
+  grid-template-columns: 1fr 260px 220px 170px;
   gap: 16px;
   align-items: end;
   margin-bottom: 18px;
