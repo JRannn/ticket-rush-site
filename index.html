@@ -107,6 +107,25 @@
               <button type="submit" class="primary-action">保存开抢设置</button>
             </form>
 
+            <form id="createCardForm" class="admin-create-card">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Create</p>
+                  <h2>添加新卡</h2>
+                </div>
+              </div>
+              <div class="admin-fields">
+                <label>卡名<input name="title" type="text" required /></label>
+                <label>价格<input name="price" type="text" required /></label>
+                <label>地点<input name="venue" type="text" required /></label>
+                <label>演出时间<input name="time" type="text" required /></label>
+                <label>卡数限制<input name="quota" type="number" min="0" step="1" value="10" required /></label>
+                <label class="wide-field">介绍<input name="description" type="text" required /></label>
+                <label class="wide-field">上传预览图<input name="image" type="file" accept="image/*" /></label>
+                <button type="submit" class="grab-button">添加这张卡</button>
+              </div>
+            </form>
+
             <div id="adminTicketList" class="admin-ticket-list"></div>
             <section class="admin-claims-panel" aria-labelledby="claimsTitle">
               <div class="section-heading">
