@@ -188,7 +188,63 @@ begin
 end;
 $$;
 
+create or replace function public.create_card(
+  p_admin_qq text,
+  p_title text,
+  p_price text,
+  p_venue text,
+  p_show_time text,
+  p_description text,
+  p_image_url text,
+  p_quota integer
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_card_id text;
+  v_sort_order integer;
+begin
+  if not public.is_card_admin(p_admin_qq) then
+    return jsonb_build_object('ok', false, 'message', '当前账号没有管理员权限');
+  end if;
+
+  v_card_id := 'card-' || replace(gen_random_uuid()::text, '-', '');
+  select coalesce(max(sort_order), 0) + 1 into v_sort_order from public.cards;
+
+  insert into public.cards (
+    id,
+    title,
+    price,
+    venue,
+    show_time,
+    description,
+    image_class,
+    image_url,
+    quota,
+    sort_order
+  )
+  values (
+    v_card_id,
+    p_title,
+    p_price,
+    p_venue,
+    p_show_time,
+    p_description,
+    'aurora',
+    coalesce(p_image_url, ''),
+    p_quota,
+    v_sort_order
+  );
+
+  return jsonb_build_object('ok', true, 'message', '新卡已添加', 'card_id', v_card_id);
+end;
+$$;
+
 grant execute on function public.claim_card(text, text, text) to anon;
 grant execute on function public.return_card(uuid, text) to anon;
 grant execute on function public.update_app_settings(text, text, timestamptz, text, integer) to anon;
 grant execute on function public.update_card(text, text, text, text, text, text, text, text, integer) to anon;
+grant execute on function public.create_card(text, text, text, text, text, text, text, integer) to anon;
