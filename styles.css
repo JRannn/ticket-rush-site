@@ -468,7 +468,8 @@ input:focus {
 }
 
 .admin-panel,
-.admin-ticket-card {
+.admin-ticket-card,
+.admin-create-card {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
@@ -496,6 +497,15 @@ input:focus {
 .admin-ticket-list {
   display: grid;
   gap: 16px;
+}
+
+.admin-create-card {
+  margin-bottom: 18px;
+  padding: 18px;
+}
+
+.admin-create-card .section-heading {
+  margin-bottom: 14px;
 }
 
 .admin-ticket-card {
@@ -627,6 +637,7 @@ input:focus {
   .profile-layout,
   .admin-panel,
   .admin-ticket-card,
+  .admin-create-card,
   .claim-row,
   .owned-ticket {
     grid-template-columns: 1fr;
