@@ -25,6 +25,7 @@ const toast = document.querySelector("#toast");
 const heroBand = document.querySelector("#heroBand");
 const ticketList = document.querySelector("#ticketList");
 const adminTicketList = document.querySelector("#adminTicketList");
+const createCardForm = document.querySelector("#createCardForm");
 const ownedTicketList = document.querySelector("#ownedTicketList");
 const adminClaimsList = document.querySelector("#adminClaimsList");
 let lastRushOpen = false;
@@ -431,6 +432,33 @@ adminTicketList.addEventListener("submit", async (event) => {
     showToast(result.message);
   } catch (error) {
     showToast("保存失败，请检查管理员权限");
+  }
+});
+
+createCardForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(createCardForm);
+  const imageUrl = await readImageAsDataUrl(formData.get("image"));
+
+  try {
+    const result = await rpc("create_card", {
+      p_admin_qq: state.user.qq,
+      p_title: formData.get("title").trim(),
+      p_price: formData.get("price").trim(),
+      p_venue: formData.get("venue").trim(),
+      p_show_time: formData.get("time").trim(),
+      p_description: formData.get("description").trim(),
+      p_image_url: imageUrl,
+      p_quota: Number(formData.get("quota"))
+    });
+    createCardForm.reset();
+    createCardForm.querySelector('input[name="quota"]').value = 10;
+    await loadData();
+    renderTickets();
+    renderAdmin();
+    showToast(result.message);
+  } catch (error) {
+    showToast("添加失败，请先更新 Supabase SQL");
   }
 });
 
