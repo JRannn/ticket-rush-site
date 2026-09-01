@@ -1,37 +1,81 @@
-const tickets = {
-  "aurora-vip": {
+const defaultTickets = [
+  {
+    id: "aurora-vip",
     title: "星河巡演 · VIP内场",
     price: "¥1280",
     venue: "上海梅赛德斯中心",
     time: "10月18日 19:30",
-    imageClass: "aurora"
+    description: "近距离内场视角，含纪念手环与提前入场通道。",
+    imageClass: "aurora",
+    imageUrl: ""
   },
-  "neon-a": {
+  {
+    id: "neon-a",
     title: "霓虹心跳 · 看台A区",
     price: "¥680",
     venue: "北京国家体育馆",
     time: "11月02日 20:00",
-    imageClass: "neon"
+    description: "正对主舞台，适合完整观看灯光秀和大屏互动。",
+    imageClass: "neon",
+    imageUrl: ""
   },
-  "summer-b": {
+  {
+    id: "summer-b",
     title: "夏夜回声 · 草坪双人票",
     price: "¥520",
     venue: "广州海心沙",
     time: "11月16日 18:00",
-    imageClass: "summer"
+    description: "户外音乐节双人套票，含入场饮品券和专属拍照区。",
+    imageClass: "summer",
+    imageUrl: ""
   },
-  "moonlight-c": {
+  {
+    id: "moonlight-c",
     title: "月光电台 · 看台C区",
     price: "¥380",
     venue: "成都凤凰山体育公园",
     time: "12月06日 19:00",
-    imageClass: "moonlight"
+    description: "高性价比票档，视野开阔，适合和朋友一起合唱。",
+    imageClass: "moonlight",
+    imageUrl: ""
   }
+];
+
+function getTonightStartTime() {
+  const date = new Date();
+  date.setHours(21, 30, 0, 0);
+  return date.toISOString();
+}
+
+function toDateTimeLocalValue(isoValue) {
+  const date = new Date(isoValue);
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
+}
+
+function fromDateTimeLocalValue(value) {
+  return new Date(value).toISOString();
+}
+
+const defaultSettings = {
+  rushTitle: "星河巡演 · 上海站",
+  startTime: getTonightStartTime()
 };
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 const state = {
   user: JSON.parse(localStorage.getItem("ticketUser") || "null"),
-  owned: JSON.parse(localStorage.getItem("ownedTickets") || "[]")
+  owned: JSON.parse(localStorage.getItem("ownedTickets") || "[]"),
+  tickets: JSON.parse(localStorage.getItem("ticketData") || "null") || defaultTickets,
+  settings: JSON.parse(localStorage.getItem("ticketSettings") || "null") || defaultSettings
 };
 
 if (state.user && !state.user.qq) {
@@ -43,11 +87,16 @@ const loginPage = document.querySelector("#loginPage");
 const ticketPage = document.querySelector("#ticketPage");
 const ticketsView = document.querySelector("#ticketsView");
 const profileView = document.querySelector("#profileView");
+const adminView = document.querySelector("#adminView");
 const toast = document.querySelector("#toast");
+const ticketList = document.querySelector("#ticketList");
+const adminTicketList = document.querySelector("#adminTicketList");
 
 function saveState() {
   localStorage.setItem("ticketUser", JSON.stringify(state.user));
   localStorage.setItem("ownedTickets", JSON.stringify(state.owned));
+  localStorage.setItem("ticketData", JSON.stringify(state.tickets));
+  localStorage.setItem("ticketSettings", JSON.stringify(state.settings));
 }
 
 function showToast(message) {
@@ -62,31 +111,87 @@ function showApp() {
   loginPage.classList.toggle("active", !loggedIn);
   ticketPage.classList.toggle("active", loggedIn);
   if (loggedIn) {
+    renderTickets();
     renderProfile();
-    renderTicketButtons();
+    renderAdmin();
+    updateCountdown();
   }
 }
 
 function switchView(view) {
-  const isProfile = view === "profile";
-  ticketsView.classList.toggle("active", !isProfile);
-  profileView.classList.toggle("active", isProfile);
+  ticketsView.classList.toggle("active", view === "tickets");
+  profileView.classList.toggle("active", view === "profile");
+  adminView.classList.toggle("active", view === "admin");
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === view);
   });
-  if (isProfile) {
-    renderProfile();
-  }
+  if (view === "profile") renderProfile();
+  if (view === "admin") renderAdmin();
 }
 
-function renderTicketButtons() {
-  document.querySelector("#grabCount").textContent = state.owned.length;
-  document.querySelectorAll(".ticket-card").forEach((card) => {
-    const button = card.querySelector(".grab-button");
-    const owned = state.owned.includes(card.dataset.ticketId);
-    button.textContent = owned ? "已抢到" : "立即抢票";
-    button.classList.toggle("done", owned);
-  });
+function getTicket(ticketId) {
+  return state.tickets.find((ticket) => ticket.id === ticketId);
+}
+
+function ticketImageMarkup(ticket, className = "ticket-image") {
+  const style = ticket.imageUrl ? ` style="background-image: url('${ticket.imageUrl}')"` : "";
+  return `<div class="${className} ${ticket.imageClass}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${style}></div>`;
+}
+
+function renderTickets() {
+  document.querySelector("#rushTitle").textContent = state.settings.rushTitle;
+  document.querySelector("#grabSummary").textContent = `已抢 ${state.owned.length} 张`;
+
+  ticketList.innerHTML = state.tickets
+    .map((ticket) => {
+      const owned = state.owned.includes(ticket.id);
+      return `
+        <article class="ticket-card" data-ticket-id="${ticket.id}">
+          ${ticketImageMarkup(ticket)}
+          <div class="ticket-info">
+            <div>
+              <div class="ticket-heading">
+                <h3>${escapeHtml(ticket.title)}</h3>
+                <span>${escapeHtml(ticket.price)}</span>
+              </div>
+              <p>${escapeHtml(ticket.description)}</p>
+              <div class="ticket-meta">
+                <span>${escapeHtml(ticket.venue)}</span>
+                <span>${escapeHtml(ticket.time)}</span>
+              </div>
+            </div>
+            <button type="button" class="grab-button ${owned ? "done" : ""}">${owned ? "已抢到" : "立即抢票"}</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function updateCountdown() {
+  const now = Date.now();
+  const startAt = new Date(state.settings.startTime).getTime();
+  const remaining = startAt - now;
+  const label = document.querySelector("#rushLabel");
+  const countdownText = document.querySelector("#countdownText");
+
+  if (remaining <= 0) {
+    label.textContent = "开抢中";
+    countdownText.textContent = "已开抢";
+    return;
+  }
+
+  const totalSeconds = Math.floor(remaining / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+
+  label.textContent = "距离开抢";
+  countdownText.textContent = days > 0 ? `${days}天 ${hh}:${mm}:${ss}` : `${hh}:${mm}:${ss}`;
 }
 
 function renderProfile() {
@@ -105,16 +210,61 @@ function renderProfile() {
 
   list.innerHTML = state.owned
     .map((ticketId) => {
-      const ticket = tickets[ticketId];
+      const ticket = getTicket(ticketId);
+      if (!ticket) return "";
       return `
         <article class="owned-ticket">
-          <div class="owned-thumb ticket-image ${ticket.imageClass}"></div>
+          ${ticketImageMarkup(ticket, "owned-thumb ticket-image")}
           <div>
-            <h3>${ticket.title}</h3>
-            <p>${ticket.venue} · ${ticket.time}</p>
+            <h3>${escapeHtml(ticket.title)}</h3>
+            <p>${escapeHtml(ticket.venue)} · ${escapeHtml(ticket.time)}</p>
           </div>
-          <strong>${ticket.price}</strong>
+          <strong>${escapeHtml(ticket.price)}</strong>
         </article>
+      `;
+    })
+    .join("");
+}
+
+function renderAdmin() {
+  document.querySelector("#adminRushTitle").value = state.settings.rushTitle;
+  document.querySelector("#adminStartTime").value = toDateTimeLocalValue(state.settings.startTime);
+
+  adminTicketList.innerHTML = state.tickets
+    .map((ticket, index) => {
+      return `
+        <form class="admin-ticket-card" data-ticket-index="${index}">
+          <div class="admin-ticket-preview">
+            ${ticketImageMarkup(ticket)}
+          </div>
+          <div class="admin-fields">
+            <label>
+              票名
+              <input name="title" type="text" value="${escapeHtml(ticket.title)}" required />
+            </label>
+            <label>
+              价格
+              <input name="price" type="text" value="${escapeHtml(ticket.price)}" required />
+            </label>
+            <label>
+              地点
+              <input name="venue" type="text" value="${escapeHtml(ticket.venue)}" required />
+            </label>
+            <label>
+              演出时间
+              <input name="time" type="text" value="${escapeHtml(ticket.time)}" required />
+            </label>
+            <label class="wide-field">
+              介绍
+              <input name="description" type="text" value="${escapeHtml(ticket.description)}" required />
+            </label>
+            <label class="wide-field">
+              上传预览图
+              <input name="image" type="file" accept="image/*" />
+            </label>
+            <button type="submit" class="grab-button">保存这张票</button>
+          </div>
+        </form>
       `;
     })
     .join("");
@@ -135,18 +285,77 @@ document.querySelectorAll(".nav-button").forEach((button) => {
   button.addEventListener("click", () => switchView(button.dataset.view));
 });
 
-document.querySelectorAll(".grab-button").forEach((button) => {
-  button.addEventListener("click", () => {
-    const ticketId = button.closest(".ticket-card").dataset.ticketId;
-    if (!state.owned.includes(ticketId)) {
-      state.owned.push(ticketId);
+ticketList.addEventListener("click", (event) => {
+  const button = event.target.closest(".grab-button");
+  if (!button) return;
+
+  const ticketId = button.closest(".ticket-card").dataset.ticketId;
+  if (!state.owned.includes(ticketId)) {
+    state.owned.push(ticketId);
+    saveState();
+    renderTickets();
+    renderProfile();
+    showToast("抢票成功，已加入个人信息页");
+    return;
+  }
+  showToast("这张票已经抢到啦");
+});
+
+document.querySelector("#settingsForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  state.settings.rushTitle = document.querySelector("#adminRushTitle").value.trim();
+  state.settings.startTime = fromDateTimeLocalValue(document.querySelector("#adminStartTime").value);
+  saveState();
+  renderTickets();
+  updateCountdown();
+  showToast("开抢设置已保存");
+});
+
+adminTicketList.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.target.closest(".admin-ticket-card");
+  const index = Number(form.dataset.ticketIndex);
+  const formData = new FormData(form);
+  const ticket = state.tickets[index];
+
+  ticket.title = formData.get("title").trim();
+  ticket.price = formData.get("price").trim();
+  ticket.venue = formData.get("venue").trim();
+  ticket.time = formData.get("time").trim();
+  ticket.description = formData.get("description").trim();
+
+  const imageFile = formData.get("image");
+  if (imageFile && imageFile.size > 0) {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      ticket.imageUrl = reader.result;
       saveState();
-      renderTicketButtons();
-      showToast("抢票成功，已加入个人信息页");
-      return;
-    }
-    showToast("这张票已经抢到啦");
-  });
+      renderTickets();
+      renderAdmin();
+      renderProfile();
+      showToast("票务图片已更新");
+    });
+    reader.readAsDataURL(imageFile);
+    return;
+  }
+
+  saveState();
+  renderTickets();
+  renderAdmin();
+  renderProfile();
+  showToast("票务信息已保存");
+});
+
+document.querySelector("#resetAdminButton").addEventListener("click", () => {
+  state.tickets = JSON.parse(JSON.stringify(defaultTickets));
+  state.settings = { ...defaultSettings, startTime: getTonightStartTime() };
+  state.owned = [];
+  saveState();
+  renderTickets();
+  renderAdmin();
+  renderProfile();
+  updateCountdown();
+  showToast("已恢复默认抢票信息");
 });
 
 document.querySelector("#logoutButton").addEventListener("click", () => {
@@ -155,4 +364,5 @@ document.querySelector("#logoutButton").addEventListener("click", () => {
   showApp();
 });
 
+window.setInterval(updateCountdown, 1000);
 showApp();
