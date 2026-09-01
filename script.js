@@ -59,7 +59,8 @@ function fromDateTimeLocalValue(value) {
 
 const defaultSettings = {
   rushTitle: "星河巡演 · 上海站",
-  startTime: getTonightStartTime()
+  startTime: getTonightStartTime(),
+  heroImageUrl: ""
 };
 
 function escapeHtml(value) {
@@ -89,8 +90,10 @@ const ticketsView = document.querySelector("#ticketsView");
 const profileView = document.querySelector("#profileView");
 const adminView = document.querySelector("#adminView");
 const toast = document.querySelector("#toast");
+const heroBand = document.querySelector("#heroBand");
 const ticketList = document.querySelector("#ticketList");
 const adminTicketList = document.querySelector("#adminTicketList");
+let lastRushOpen = isRushOpen();
 
 function saveState() {
   localStorage.setItem("ticketUser", JSON.stringify(state.user));
@@ -133,6 +136,10 @@ function getTicket(ticketId) {
   return state.tickets.find((ticket) => ticket.id === ticketId);
 }
 
+function isRushOpen() {
+  return Date.now() >= new Date(state.settings.startTime).getTime();
+}
+
 function ticketImageMarkup(ticket, className = "ticket-image") {
   const style = ticket.imageUrl ? ` style="background-image: url('${ticket.imageUrl}')"` : "";
   return `<div class="${className} ${ticket.imageClass}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${style}></div>`;
@@ -141,10 +148,14 @@ function ticketImageMarkup(ticket, className = "ticket-image") {
 function renderTickets() {
   document.querySelector("#rushTitle").textContent = state.settings.rushTitle;
   document.querySelector("#grabSummary").textContent = `已抢 ${state.owned.length} 张`;
+  heroBand.style.backgroundImage = state.settings.heroImageUrl
+    ? `linear-gradient(100deg, rgba(23, 21, 31, 0.9), rgba(230, 63, 79, 0.75)), url('${state.settings.heroImageUrl}')`
+    : "";
 
   ticketList.innerHTML = state.tickets
     .map((ticket) => {
       const owned = state.owned.includes(ticket.id);
+      const disabled = !isRushOpen();
       return `
         <article class="ticket-card" data-ticket-id="${ticket.id}">
           ${ticketImageMarkup(ticket)}
@@ -160,7 +171,7 @@ function renderTickets() {
                 <span>${escapeHtml(ticket.time)}</span>
               </div>
             </div>
-            <button type="button" class="grab-button ${owned ? "done" : ""}">${owned ? "已抢到" : "立即抢票"}</button>
+            <button type="button" class="grab-button ${owned ? "done" : ""}" ${disabled ? "disabled" : ""}>${owned ? "已抢到" : disabled ? "未开抢" : "立即抢卡"}</button>
           </div>
         </article>
       `;
@@ -178,9 +189,14 @@ function updateCountdown() {
   if (remaining <= 0) {
     label.textContent = "开抢中";
     countdownText.textContent = "已开抢";
+    if (!lastRushOpen) {
+      lastRushOpen = true;
+      renderTickets();
+    }
     return;
   }
 
+  lastRushOpen = false;
   const totalSeconds = Math.floor(remaining / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);
@@ -204,7 +220,7 @@ function renderProfile() {
 
   const list = document.querySelector("#ownedTicketList");
   if (state.owned.length === 0) {
-    list.innerHTML = '<div class="empty-state">还没有抢到票，回到抢票大厅试试看。</div>';
+    list.innerHTML = '<div class="empty-state">还没有抢到卡，回到抢卡大厅试试看。</div>';
     return;
   }
 
@@ -290,25 +306,45 @@ ticketList.addEventListener("click", (event) => {
   if (!button) return;
 
   const ticketId = button.closest(".ticket-card").dataset.ticketId;
+  if (!isRushOpen()) {
+    showToast("还没到开抢时间，请等倒计时结束");
+    return;
+  }
+
   if (!state.owned.includes(ticketId)) {
     state.owned.push(ticketId);
     saveState();
     renderTickets();
     renderProfile();
-    showToast("抢票成功，已加入个人信息页");
+    showToast("抢卡成功，已加入个人信息页");
     return;
   }
-  showToast("这张票已经抢到啦");
+  showToast("这张卡已经抢到啦");
 });
 
 document.querySelector("#settingsForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  state.settings.rushTitle = document.querySelector("#adminRushTitle").value.trim();
-  state.settings.startTime = fromDateTimeLocalValue(document.querySelector("#adminStartTime").value);
-  saveState();
-  renderTickets();
-  updateCountdown();
-  showToast("开抢设置已保存");
+  const heroImageFile = document.querySelector("#adminHeroImage").files[0];
+  const saveSettings = () => {
+    state.settings.rushTitle = document.querySelector("#adminRushTitle").value.trim();
+    state.settings.startTime = fromDateTimeLocalValue(document.querySelector("#adminStartTime").value);
+    saveState();
+    renderTickets();
+    updateCountdown();
+    showToast("开抢设置已保存");
+  };
+
+  if (heroImageFile) {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      state.settings.heroImageUrl = reader.result;
+      saveSettings();
+    });
+    reader.readAsDataURL(heroImageFile);
+    return;
+  }
+
+  saveSettings();
 });
 
 adminTicketList.addEventListener("submit", (event) => {
@@ -355,7 +391,7 @@ document.querySelector("#resetAdminButton").addEventListener("click", () => {
   renderAdmin();
   renderProfile();
   updateCountdown();
-  showToast("已恢复默认抢票信息");
+  showToast("已恢复默认抢卡信息");
 });
 
 document.querySelector("#logoutButton").addEventListener("click", () => {
