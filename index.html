@@ -16,7 +16,7 @@
 
           <label>
             QQ号
-            <input id="qqInput" type="text" placeholder="请输入QQ号" inputmode="numeric" required />
+            <input id="qqInput" type="text" placeholder="请输入QQ号" required />
           </label>
           <label>
             ID
@@ -35,7 +35,7 @@
           <nav class="nav-actions" aria-label="页面导航">
             <button class="nav-button active" type="button" data-view="tickets">抢卡</button>
             <button class="nav-button" type="button" data-view="profile">我的</button>
-            <button class="nav-button" type="button" data-view="admin">管理</button>
+            <button id="adminNavButton" class="nav-button admin-only" type="button" data-view="admin">管理</button>
           </nav>
         </header>
 
@@ -96,6 +96,10 @@
                 开抢时间
                 <input id="adminStartTime" type="datetime-local" required />
               </label>
+              <label>
+                单账号限额
+                <input id="adminMaxCards" type="number" min="0" step="1" required />
+              </label>
               <label class="wide-field">
                 首页背景图
                 <input id="adminHeroImage" type="file" accept="image/*" />
@@ -104,6 +108,16 @@
             </form>
 
             <div id="adminTicketList" class="admin-ticket-list"></div>
+            <section class="admin-claims-panel" aria-labelledby="claimsTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Claims</p>
+                  <h2 id="claimsTitle">抢到卡的人</h2>
+                </div>
+                <span id="claimsCount">0 条</span>
+              </div>
+              <div id="adminClaimsList" class="admin-claims-list"></div>
+            </section>
           </section>
         </div>
       </section>
