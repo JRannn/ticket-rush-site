@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>星火抢票</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section id="loginPage" class="page login-page active" aria-labelledby="loginTitle">
+        <form id="loginForm" class="login-panel">
+          <p class="eyebrow">Concert Ticket Rush</p>
+          <h1 id="loginTitle">星火抢票</h1>
+          <p class="login-copy">登录后选择演唱会、场次和票档，抢到的票会自动进入个人信息页。</p>
+
+          <label>
+            QQ号
+            <input id="qqInput" type="text" placeholder="请输入QQ号" inputmode="numeric" required />
+          </label>
+          <label>
+            ID
+            <input id="idInput" type="text" placeholder="例如：Star_1001" required />
+          </label>
+          <button type="submit" class="primary-action">登录并开始抢票</button>
+        </form>
+      </section>
+
+      <section id="ticketPage" class="page ticket-page" aria-labelledby="ticketTitle">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Live Now</p>
+            <h1 id="ticketTitle">演唱会抢票大厅</h1>
+          </div>
+          <nav class="nav-actions" aria-label="页面导航">
+            <button class="nav-button active" type="button" data-view="tickets">抢票</button>
+            <button class="nav-button" type="button" data-view="profile">我的</button>
+          </nav>
+        </header>
+
+        <div id="ticketsView" class="content-view active">
+          <section class="hero-band" aria-label="抢票状态">
+            <div>
+              <p>今日热抢</p>
+              <h2>星河巡演 · 上海站</h2>
+            </div>
+            <div class="rush-status">
+              <span>开抢中</span>
+              <strong id="grabCount">0</strong>
+            </div>
+          </section>
+
+          <section class="ticket-list" aria-label="票务列表">
+            <article class="ticket-card" data-ticket-id="aurora-vip">
+              <div class="ticket-image aurora" role="img" aria-label="极光舞台预览图"></div>
+              <div class="ticket-info">
+                <div class="ticket-heading">
+                  <h3>星河巡演 · VIP内场</h3>
+                  <span>¥1280</span>
+                </div>
+                <p>近距离内场视角，含纪念手环与提前入场通道。</p>
+                <div class="ticket-meta">
+                  <span>上海梅赛德斯中心</span>
+                  <span>10月18日 19:30</span>
+                </div>
+                <button type="button" class="grab-button">立即抢票</button>
+              </div>
+            </article>
+
+            <article class="ticket-card" data-ticket-id="neon-a">
+              <div class="ticket-image neon" role="img" aria-label="霓虹舞台预览图"></div>
+              <div class="ticket-info">
+                <div class="ticket-heading">
+                  <h3>霓虹心跳 · 看台A区</h3>
+                  <span>¥680</span>
+                </div>
+                <p>正对主舞台，适合完整观看灯光秀和大屏互动。</p>
+                <div class="ticket-meta">
+                  <span>北京国家体育馆</span>
+                  <span>11月02日 20:00</span>
+                </div>
+                <button type="button" class="grab-button">立即抢票</button>
+              </div>
+            </article>
+
+            <article class="ticket-card" data-ticket-id="summer-b">
+              <div class="ticket-image summer" role="img" aria-label="夏夜音乐节预览图"></div>
+              <div class="ticket-info">
+                <div class="ticket-heading">
+                  <h3>夏夜回声 · 草坪双人票</h3>
+                  <span>¥520</span>
+                </div>
+                <p>户外音乐节双人套票，含入场饮品券和专属拍照区。</p>
+                <div class="ticket-meta">
+                  <span>广州海心沙</span>
+                  <span>11月16日 18:00</span>
+                </div>
+                <button type="button" class="grab-button">立即抢票</button>
+              </div>
+            </article>
+
+            <article class="ticket-card" data-ticket-id="moonlight-c">
+              <div class="ticket-image moonlight" role="img" aria-label="月光剧场预览图"></div>
+              <div class="ticket-info">
+                <div class="ticket-heading">
+                  <h3>月光电台 · 看台C区</h3>
+                  <span>¥380</span>
+                </div>
+                <p>高性价比票档，视野开阔，适合和朋友一起合唱。</p>
+                <div class="ticket-meta">
+                  <span>成都凤凰山体育公园</span>
+                  <span>12月06日 19:00</span>
+                </div>
+                <button type="button" class="grab-button">立即抢票</button>
+              </div>
+            </article>
+          </section>
+        </div>
+
+        <div id="profileView" class="content-view">
+          <section class="profile-layout">
+            <aside class="profile-card">
+              <div class="avatar" id="avatarInitial">星</div>
+              <h2 id="profileName">未登录</h2>
+              <p id="profileQq">--</p>
+              <button type="button" id="logoutButton" class="secondary-action">退出登录</button>
+            </aside>
+
+            <section class="owned-tickets" aria-labelledby="ownedTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">My Tickets</p>
+                  <h2 id="ownedTitle">我抢到的票</h2>
+                </div>
+                <span id="ownedCount">0 张</span>
+              </div>
+              <div id="ownedTicketList" class="owned-ticket-list"></div>
+            </section>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="script.js"></script>
+  </body>
+</html>
