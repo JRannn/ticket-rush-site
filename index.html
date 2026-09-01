@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>星火抢票</title>
+    <title>反季节抢卡系统</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -11,8 +11,8 @@
       <section id="loginPage" class="page login-page active" aria-labelledby="loginTitle">
         <form id="loginForm" class="login-panel">
           <p class="eyebrow">Concert Ticket Rush</p>
-          <h1 id="loginTitle">星火抢票</h1>
-          <p class="login-copy">登录后选择演唱会、场次和票档，抢到的票会自动进入个人信息页。</p>
+          <h1 id="loginTitle">反季节抢卡系统</h1>
+          <p class="login-copy">登录后选择演唱会、场次和卡档，抢到的卡会自动进入个人信息页。</p>
 
           <label>
             QQ号
@@ -20,9 +20,9 @@
           </label>
           <label>
             ID
-            <input id="idInput" type="text" placeholder="例如：Star_1001" required />
+            <input id="idInput" type="text" placeholder="QQ昵称或圈名" required />
           </label>
-          <button type="submit" class="primary-action">登录并开始抢票</button>
+          <button type="submit" class="primary-action">登录并开始抢卡</button>
         </form>
       </section>
 
@@ -30,17 +30,17 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">Live Now</p>
-            <h1 id="ticketTitle">演唱会抢票大厅</h1>
+            <h1 id="ticketTitle">抢卡大厅</h1>
           </div>
           <nav class="nav-actions" aria-label="页面导航">
-            <button class="nav-button active" type="button" data-view="tickets">抢票</button>
+            <button class="nav-button active" type="button" data-view="tickets">抢卡</button>
             <button class="nav-button" type="button" data-view="profile">我的</button>
             <button class="nav-button" type="button" data-view="admin">管理</button>
           </nav>
         </header>
 
         <div id="ticketsView" class="content-view active">
-          <section class="hero-band" aria-label="抢票状态">
+          <section id="heroBand" class="hero-band" aria-label="抢卡状态">
             <div>
               <p>今日热抢</p>
               <h2 id="rushTitle">星河巡演 · 上海站</h2>
@@ -52,7 +52,7 @@
             </div>
           </section>
 
-          <section id="ticketList" class="ticket-list" aria-label="票务列表"></section>
+          <section id="ticketList" class="ticket-list" aria-label="卡片列表"></section>
         </div>
 
         <div id="profileView" class="content-view">
@@ -68,7 +68,7 @@
               <div class="section-heading">
                 <div>
                   <p class="eyebrow">My Tickets</p>
-                  <h2 id="ownedTitle">我抢到的票</h2>
+                  <h2 id="ownedTitle">我抢到的卡</h2>
                 </div>
                 <span id="ownedCount">0 张</span>
               </div>
@@ -95,6 +95,10 @@
               <label>
                 开抢时间
                 <input id="adminStartTime" type="datetime-local" required />
+              </label>
+              <label class="wide-field">
+                首页背景图
+                <input id="adminHeroImage" type="file" accept="image/*" />
               </label>
               <button type="submit" class="primary-action">保存开抢设置</button>
             </form>
