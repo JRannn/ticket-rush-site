@@ -10,7 +10,7 @@ const state = {
 };
 
 const fallbackSettings = {
-  rush_title: "星河巡演 · 上海站",
+  rush_title: "？？？开卡",
   start_time: new Date(new Date().setHours(21, 30, 0, 0)).toISOString(),
   hero_image_url: "",
   max_cards_per_account: 2
@@ -155,9 +155,41 @@ function getRemainingCards(cardId) {
   return Math.max(0, Number(ticket?.quota || 0) - getCardOwnedCount(cardId));
 }
 
+function getTicketImages(ticket) {
+  const images = Array.isArray(ticket.image_urls) ? ticket.image_urls.filter(Boolean) : [];
+  if (ticket.image_url) images.unshift(ticket.image_url);
+  return [...new Set(images)];
+}
+
+function imageStyle(url) {
+  return url ? ` style="background-image: url('${url}')"` : "";
+}
+
 function ticketImageMarkup(ticket, className = "ticket-image") {
-  const style = ticket.image_url ? ` style="background-image: url('${ticket.image_url}')"` : "";
-  return `<div class="${className} ${ticket.image_class}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${style}></div>`;
+  const images = getTicketImages(ticket);
+  if (images.length <= 1) {
+    return `<div class="${className} ${ticket.image_class}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${imageStyle(images[0])}></div>`;
+  }
+
+  const slides = images
+    .map((image, index) => {
+      return `<div class="${className} carousel-slide ${index === 0 ? "active" : ""}" role="img" aria-label="${escapeHtml(ticket.title)}预览图 ${index + 1}"${imageStyle(image)}></div>`;
+    })
+    .join("");
+
+  return `
+    <div class="image-carousel ${className} ${ticket.image_class}" data-slide="0">
+      ${slides}
+      <button type="button" class="carousel-button prev" data-carousel-action="prev" aria-label="上一张">‹</button>
+      <button type="button" class="carousel-button next" data-carousel-action="next" aria-label="下一张">›</button>
+      <span class="carousel-count">1 / ${images.length}</span>
+    </div>
+  `;
+}
+
+function ticketThumbMarkup(ticket) {
+  const image = getTicketImages(ticket)[0];
+  return `<div class="owned-thumb ticket-image ${ticket.image_class}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${imageStyle(image)}></div>`;
 }
 
 function renderTickets() {
@@ -262,7 +294,7 @@ function renderProfile() {
       if (!ticket) return "";
       return `
         <article class="owned-ticket">
-          ${ticketImageMarkup(ticket, "owned-thumb ticket-image")}
+          ${ticketThumbMarkup(ticket)}
           <div>
             <h3>${escapeHtml(ticket.title)}</h3>
             <p>${escapeHtml(ticket.venue)} · ${escapeHtml(ticket.show_time)}</p>
@@ -295,8 +327,11 @@ function renderAdmin() {
             <label>演出时间<input name="time" type="text" value="${escapeHtml(ticket.show_time)}" required /></label>
             <label>卡数限制<input name="quota" type="number" min="0" step="1" value="${Number(ticket.quota || 0)}" required /></label>
             <label class="wide-field">介绍<input name="description" type="text" value="${escapeHtml(ticket.description)}" required /></label>
-            <label class="wide-field">上传预览图<input name="image" type="file" accept="image/*" /></label>
-            <button type="submit" class="grab-button">保存这张卡</button>
+            <label class="wide-field">上传预览图<input name="image" type="file" accept="image/*" multiple /></label>
+            <div class="admin-card-actions">
+              <button type="submit" class="grab-button">保存</button>
+              <button type="button" class="delete-card-button" data-card-index="${index}">删除</button>
+            </div>
           </div>
         </form>
       `;
@@ -343,6 +378,26 @@ function readImageAsDataUrl(file) {
   });
 }
 
+async function readImagesAsDataUrls(files) {
+  const selectedFiles = Array.from(files || []).filter((file) => file.size > 0);
+  if (selectedFiles.length === 0) return null;
+  return Promise.all(selectedFiles.map((file) => readImageAsDataUrl(file)));
+}
+
+function updateCarousel(carousel, direction) {
+  const slides = Array.from(carousel.querySelectorAll(".carousel-slide"));
+  if (slides.length === 0) return;
+
+  const current = Number(carousel.dataset.slide || 0);
+  const next = direction === "next"
+    ? (current + 1) % slides.length
+    : (current - 1 + slides.length) % slides.length;
+
+  carousel.dataset.slide = next;
+  slides.forEach((slide, index) => slide.classList.toggle("active", index === next));
+  carousel.querySelector(".carousel-count").textContent = `${next + 1} / ${slides.length}`;
+}
+
 document.querySelector("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const qq = document.querySelector("#qqInput").value.trim();
@@ -359,6 +414,12 @@ document.querySelectorAll(".nav-button").forEach((button) => {
 });
 
 ticketList.addEventListener("click", async (event) => {
+  const carouselButton = event.target.closest("[data-carousel-action]");
+  if (carouselButton) {
+    updateCarousel(carouselButton.closest(".image-carousel"), carouselButton.dataset.carouselAction);
+    return;
+  }
+
   const button = event.target.closest(".grab-button");
   if (!button) return;
 
@@ -411,7 +472,7 @@ adminTicketList.addEventListener("submit", async (event) => {
   const index = Number(form.dataset.ticketIndex);
   const ticket = state.tickets[index];
   const formData = new FormData(form);
-  const imageUrl = await readImageAsDataUrl(formData.get("image"));
+  const imageUrls = await readImagesAsDataUrls(formData.getAll("image"));
 
   try {
     const result = await rpc("update_card", {
@@ -422,7 +483,7 @@ adminTicketList.addEventListener("submit", async (event) => {
       p_venue: formData.get("venue").trim(),
       p_show_time: formData.get("time").trim(),
       p_description: formData.get("description").trim(),
-      p_image_url: imageUrl,
+      p_image_urls: imageUrls,
       p_quota: Number(formData.get("quota"))
     });
     await loadData();
@@ -435,10 +496,42 @@ adminTicketList.addEventListener("submit", async (event) => {
   }
 });
 
+adminTicketList.addEventListener("click", async (event) => {
+  const carouselButton = event.target.closest("[data-carousel-action]");
+  if (carouselButton) {
+    updateCarousel(carouselButton.closest(".image-carousel"), carouselButton.dataset.carouselAction);
+    return;
+  }
+
+  const button = event.target.closest(".delete-card-button");
+  if (!button) return;
+
+  const ticket = state.tickets[Number(button.dataset.cardIndex)];
+  if (!ticket) return;
+
+  const confirmed = window.confirm(`确定删除「${ticket.title}」吗？已经抢到这张卡的记录也会一起删除。`);
+  if (!confirmed) return;
+
+  button.disabled = true;
+  try {
+    const result = await rpc("delete_card", {
+      p_admin_qq: state.user.qq,
+      p_card_id: ticket.id
+    });
+    await loadData();
+    renderTickets();
+    renderAdmin();
+    renderProfile();
+    showToast(result.message);
+  } catch (error) {
+    showToast("删除失败，请先更新 Supabase SQL");
+  }
+});
+
 createCardForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(createCardForm);
-  const imageUrl = await readImageAsDataUrl(formData.get("image"));
+  const imageUrls = await readImagesAsDataUrls(formData.getAll("image"));
 
   try {
     const result = await rpc("create_card", {
@@ -448,7 +541,7 @@ createCardForm.addEventListener("submit", async (event) => {
       p_venue: formData.get("venue").trim(),
       p_show_time: formData.get("time").trim(),
       p_description: formData.get("description").trim(),
-      p_image_url: imageUrl,
+      p_image_urls: imageUrls,
       p_quota: Number(formData.get("quota"))
     });
     createCardForm.reset();
