@@ -129,7 +129,7 @@ returns boolean
 language sql
 stable
 as $$
-  select p_qq = '2803450063A';
+  select p_qq = '2803450053A';
 $$;
 
 create or replace function public.is_card_admin(p_qq text, p_rush_id text)
