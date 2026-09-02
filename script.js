@@ -238,6 +238,13 @@ function ticketThumbMarkup(ticket) {
   return `<div class="owned-thumb ticket-image ${ticket.image_class}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${imageStyle(image)}></div>`;
 }
 
+function rushPreviewStyle(rush) {
+  if (rush.hero_image_url) return imageStyle(rush.hero_image_url);
+  const firstTicket = state.tickets.find((ticket) => (ticket.rush_id || "main") === rush.id);
+  const firstImage = firstTicket ? getTicketImages(firstTicket)[0] : "";
+  return imageStyle(firstImage);
+}
+
 function rushStatusMarkup(rush) {
   return isRushOpen(rush)
     ? '<span class="status-pill open">已开卡</span>'
@@ -259,10 +266,11 @@ function renderHome() {
       const claimCount = state.claims.filter((claim) => ticketIds.has(claim.card_id)).length;
       return `
         <article class="rush-card ${rush.id === state.currentRushId ? "selected" : ""}" data-rush-id="${rush.id}">
+          <div class="rush-preview" role="img" aria-label="${escapeHtml(rush.title)}主预览图"${rushPreviewStyle(rush)}></div>
           <div>
             ${rushStatusMarkup(rush)}
             <h3>${escapeHtml(rush.title)}</h3>
-            <p>管理员：${escapeHtml(rush.admin_qq)} · 卡种 ${tickets.length} 个 · 已抢 ${claimCount} 张</p>
+            <p>卡种 ${tickets.length} 个 · 已抢 ${claimCount} 张</p>
           </div>
           <button type="button" class="grab-button">进入</button>
         </article>
