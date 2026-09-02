@@ -8,6 +8,7 @@ const state = {
   tickets: [],
   claims: [],
   currentRushId: localStorage.getItem("currentRushId") || "main",
+  currentView: localStorage.getItem("currentView") || "home",
   loadedRushDetails: new Set()
 };
 
@@ -43,6 +44,12 @@ function saveUser() {
 
 function saveCurrentRush() {
   localStorage.setItem("currentRushId", state.currentRushId);
+}
+
+function saveCurrentView(view) {
+  const nextView = ["home", "tickets", "profile", "admin"].includes(view) ? view : "home";
+  state.currentView = nextView;
+  localStorage.setItem("currentView", nextView);
 }
 
 function isSuperAdmin() {
@@ -175,11 +182,9 @@ async function showApp() {
 
   try {
     await loadData();
-    renderHome();
-    renderTickets();
-    renderProfile();
     updateAdminNav();
     updateCountdown();
+    switchView(state.currentView);
     loadRushPreviews();
   } catch (error) {
     showLoading("数据加载失败，请刷新重试。");
@@ -193,10 +198,15 @@ function updateAdminNav() {
 }
 
 function switchView(view) {
+  if (!["home", "tickets", "profile", "admin"].includes(view)) {
+    view = "home";
+  }
+
   if (view === "admin" && !isAdmin()) {
     showToast("当前账号没有这个开卡的管理员权限");
     view = "home";
   }
+  saveCurrentView(view);
 
   homeView.classList.toggle("active", view === "home");
   ticketsView.classList.toggle("active", view === "tickets");
@@ -556,7 +566,6 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
   state.user = { qq, name };
   saveUser();
   await showApp();
-  switchView("home");
   showToast("登录成功");
 });
 
