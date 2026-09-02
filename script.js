@@ -145,20 +145,63 @@ async function loadRushPreviews() {
 async function loadRushDetails(rushId, force = false) {
   if (!force && state.loadedRushDetails.has(rushId)) return;
 
-  const [rushRows, cards] = await Promise.all([
-    api(`/rest/v1/rush_events?select=*&id=eq.${encodeURIComponent(rushId)}`),
-    api(`/rest/v1/cards?select=*&rush_id=eq.${encodeURIComponent(rushId)}&order=sort_order.asc`)
-  ]);
+  if (force) {
+    state.loadedRushDetails.delete(rushId);
+  }
+
+  const cardIds = currentTickets()
+    .filter((ticket) => (ticket.rush_id || "main") === rushId)
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+    .map((ticket) => ticket.id);
+
+  const rushRows = await api(`/rest/v1/rush_events?select=*&id=eq.${encodeURIComponent(rushId)}`);
 
   if (rushRows[0]) {
     state.rushes = state.rushes.map((rush) => (rush.id === rushId ? { ...rush, ...rushRows[0] } : rush));
   }
+  renderAfterDetailUpdate(rushId);
 
-  state.tickets = [
-    ...state.tickets.filter((ticket) => (ticket.rush_id || "main") !== rushId),
-    ...cards
-  ].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+  if (cardIds.length === 0) {
+    state.loadedRushDetails.add(rushId);
+    renderAfterDetailUpdate(rushId);
+    return;
+  }
+
+  await Promise.allSettled(
+    cardIds.map(async (cardId) => {
+      const cards = await api(`/rest/v1/cards?select=*&id=eq.${encodeURIComponent(cardId)}`);
+      if (cards[0]) {
+        mergeCardDetail(cards[0]);
+        renderAfterDetailUpdate(rushId);
+      }
+    })
+  );
+
   state.loadedRushDetails.add(rushId);
+  renderAfterDetailUpdate(rushId);
+}
+
+function mergeCardDetail(card) {
+  const index = state.tickets.findIndex((ticket) => ticket.id === card.id);
+  if (index >= 0) {
+    state.tickets[index] = { ...state.tickets[index], ...card };
+  } else {
+    state.tickets.push(card);
+  }
+  state.tickets.sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+}
+
+function renderAfterDetailUpdate(rushId) {
+  if (getCurrentRush().id !== rushId) return;
+
+  renderHome();
+  if (ticketsView.classList.contains("active")) renderTickets();
+  if (profileView.classList.contains("active")) renderProfile();
+  if (adminView.classList.contains("active")) {
+    renderTickets();
+    renderAdmin();
+  }
+  updateAdminNav();
 }
 
 function showToast(message) {
