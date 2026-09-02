@@ -217,8 +217,8 @@ input:focus {
   min-height: 92px;
   border-radius: 6px;
   background:
-    linear-gradient(140deg, rgba(49, 88, 221, 0.2), rgba(0, 169, 165, 0.15)),
-    url("https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=700&q=80");
+    linear-gradient(140deg, rgba(49, 88, 221, 0.18), rgba(0, 169, 165, 0.14)),
+    #f2edf7;
   background-size: cover;
   background-position: center;
 }
@@ -331,6 +331,17 @@ input:focus {
   border-radius: 6px;
   background-size: cover;
   background-position: center;
+}
+
+.image-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background:
+    linear-gradient(140deg, rgba(49, 88, 221, 0.14), rgba(0, 169, 165, 0.1)),
+    #f2edf7;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .image-carousel {
