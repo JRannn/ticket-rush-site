@@ -178,12 +178,75 @@ input:focus {
   border-color: var(--ink);
 }
 
-.admin-only {
+.admin-only,
+.super-only {
   display: none;
 }
 
 .admin-only.visible {
   display: inline-block;
+}
+
+.super-only.visible {
+  display: block;
+}
+
+.home-layout {
+  max-width: 1120px;
+  margin: 24px auto;
+}
+
+.rush-list {
+  display: grid;
+  gap: 14px;
+}
+
+.rush-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 28px rgba(31, 24, 44, 0.08);
+}
+
+.rush-card.selected {
+  border-color: rgba(0, 169, 165, 0.6);
+  box-shadow: 0 12px 32px rgba(0, 169, 165, 0.12);
+}
+
+.rush-card h3 {
+  margin: 10px 0 6px;
+  font-size: 22px;
+}
+
+.rush-card p {
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.status-pill.open {
+  color: #fff;
+  background: var(--teal);
+}
+
+.status-pill.pending {
+  color: var(--ink);
+  background: var(--gold);
 }
 
 .hero-band {
@@ -709,9 +772,15 @@ input:focus {
   .admin-panel,
   .admin-ticket-card,
   .admin-create-card,
+  .rush-card,
   .claim-row,
   .owned-ticket {
     grid-template-columns: 1fr;
+  }
+
+  .rush-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .admin-fields {
