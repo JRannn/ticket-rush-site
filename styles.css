@@ -202,8 +202,8 @@ input:focus {
 }
 
 .rush-card {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
   gap: 18px;
   align-items: center;
   padding: 18px;
@@ -211,6 +211,16 @@ input:focus {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 10px 28px rgba(31, 24, 44, 0.08);
+}
+
+.rush-preview {
+  min-height: 92px;
+  border-radius: 6px;
+  background:
+    linear-gradient(140deg, rgba(49, 88, 221, 0.2), rgba(0, 169, 165, 0.15)),
+    url("https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=700&q=80");
+  background-size: cover;
+  background-position: center;
 }
 
 .rush-card.selected {
@@ -780,7 +790,6 @@ input:focus {
 
   .rush-card {
     align-items: stretch;
-    flex-direction: column;
   }
 
   .admin-fields {
