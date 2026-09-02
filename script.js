@@ -7,7 +7,8 @@ const state = {
   rushes: [],
   tickets: [],
   claims: [],
-  currentRushId: localStorage.getItem("currentRushId") || "main"
+  currentRushId: localStorage.getItem("currentRushId") || "main",
+  loadedRushDetails: new Set()
 };
 
 const fallbackRush = {
@@ -97,20 +98,60 @@ async function rpc(name, body) {
 }
 
 async function loadData() {
+  const existingCards = new Map(state.tickets.map((ticket) => [ticket.id, ticket]));
   const [rushes, cards, claims] = await Promise.all([
-    api("/rest/v1/rush_events?select=*&order=sort_order.asc"),
-    api("/rest/v1/cards?select=*&order=sort_order.asc"),
+    api("/rest/v1/rush_events?select=id,title,start_time,max_cards_per_account,admin_qq,sort_order&order=sort_order.asc"),
+    api("/rest/v1/cards?select=id,rush_id,title,price,venue,show_time,description,image_class,quota,sort_order&order=sort_order.asc"),
     api("/rest/v1/claims?select=*&order=claimed_at.desc")
   ]);
 
-  state.rushes = rushes.length ? rushes : [fallbackRush];
-  state.tickets = cards;
+  state.rushes = rushes.length
+    ? rushes.map((rush) => ({ ...rush, hero_image_url: getCurrentRushImage(rush.id) }))
+    : [fallbackRush];
+  state.tickets = cards.map((card) => ({ ...existingCards.get(card.id), ...card }));
   state.claims = claims;
 
   if (!state.rushes.some((rush) => rush.id === state.currentRushId)) {
     state.currentRushId = state.rushes[0].id;
     saveCurrentRush();
   }
+}
+
+function getCurrentRushImage(rushId) {
+  return state.rushes.find((rush) => rush.id === rushId)?.hero_image_url || "";
+}
+
+async function loadRushPreviews() {
+  try {
+    const rushImages = await api("/rest/v1/rush_events?select=id,hero_image_url&order=sort_order.asc");
+    state.rushes = state.rushes.map((rush) => ({
+      ...rush,
+      hero_image_url: rushImages.find((item) => item.id === rush.id)?.hero_image_url || rush.hero_image_url || ""
+    }));
+    renderHome();
+    if (homeView.classList.contains("active")) updateAdminNav();
+  } catch (error) {
+    showToast("主预览图加载较慢，稍后会再试");
+  }
+}
+
+async function loadRushDetails(rushId, force = false) {
+  if (!force && state.loadedRushDetails.has(rushId)) return;
+
+  const [rushRows, cards] = await Promise.all([
+    api(`/rest/v1/rush_events?select=*&id=eq.${encodeURIComponent(rushId)}`),
+    api(`/rest/v1/cards?select=*&rush_id=eq.${encodeURIComponent(rushId)}&order=sort_order.asc`)
+  ]);
+
+  if (rushRows[0]) {
+    state.rushes = state.rushes.map((rush) => (rush.id === rushId ? { ...rush, ...rushRows[0] } : rush));
+  }
+
+  state.tickets = [
+    ...state.tickets.filter((ticket) => (ticket.rush_id || "main") !== rushId),
+    ...cards
+  ].sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+  state.loadedRushDetails.add(rushId);
 }
 
 function showToast(message) {
@@ -139,8 +180,9 @@ async function showApp() {
     renderProfile();
     updateAdminNav();
     updateCountdown();
+    loadRushPreviews();
   } catch (error) {
-    showLoading("Supabase 还没准备好，请先运行最新版 SQL。");
+    showLoading("数据加载失败，请刷新重试。");
     showToast("数据库连接失败");
   }
 }
@@ -168,6 +210,19 @@ function switchView(view) {
   if (view === "tickets") renderTickets();
   if (view === "profile") renderProfile();
   if (view === "admin") renderAdmin();
+
+  if ((view === "tickets" || view === "admin") && !state.loadedRushDetails.has(getCurrentRush().id)) {
+    renderTickets(true);
+    loadRushDetails(getCurrentRush().id)
+      .then(() => {
+        renderHome();
+        renderTickets();
+        renderProfile();
+        updateAdminNav();
+        if (adminView.classList.contains("active")) renderAdmin();
+      })
+      .catch(() => showToast("卡片图片加载失败，文字信息可先查看"));
+  }
 }
 
 function currentTickets() {
@@ -213,6 +268,11 @@ function imageStyle(url) {
 
 function ticketImageMarkup(ticket, className = "ticket-image") {
   const images = getTicketImages(ticket);
+  if (images.length === 0) {
+    const detailLoaded = state.loadedRushDetails.has(ticket.rush_id || "main");
+    return `<div class="${className} image-placeholder" role="img" aria-label="${escapeHtml(ticket.title)}预览图"><span>${detailLoaded ? "暂无图片" : "图片加载中"}</span></div>`;
+  }
+
   if (images.length <= 1) {
     return `<div class="${className} ${ticket.image_class}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${imageStyle(images[0])}></div>`;
   }
@@ -279,11 +339,11 @@ function renderHome() {
     .join("");
 }
 
-function renderTickets() {
+function renderTickets(isLoadingDetails = false) {
   const rush = getCurrentRush();
   const tickets = currentTickets();
   document.querySelector("#rushTitle").textContent = rush.title;
-  document.querySelector("#grabSummary").textContent = `已抢 ${currentClaims().length} 张`;
+  document.querySelector("#grabSummary").textContent = isLoadingDetails ? "正在加载卡片详情..." : `已抢 ${currentClaims().length} 张`;
   heroBand.style.backgroundImage = rush.hero_image_url
     ? `linear-gradient(100deg, rgba(23, 21, 31, 0.9), rgba(230, 63, 79, 0.75)), url('${rush.hero_image_url}')`
     : "";
@@ -536,6 +596,7 @@ createRushForm.addEventListener("submit", async (event) => {
     await loadData();
     state.currentRushId = result.rush_id;
     saveCurrentRush();
+    await loadRushDetails(state.currentRushId, true);
     renderHome();
     renderTickets();
     updateAdminNav();
@@ -565,6 +626,7 @@ ticketList.addEventListener("click", async (event) => {
       p_card_id: ticketId
     });
     await loadData();
+    await loadRushDetails(getCurrentRush().id, true);
     renderHome();
     renderTickets();
     renderProfile();
@@ -591,6 +653,7 @@ document.querySelector("#settingsForm").addEventListener("submit", async (event)
       p_max_cards_per_account: Number(document.querySelector("#adminMaxCards").value)
     });
     await loadData();
+    await loadRushDetails(getCurrentRush().id, true);
     renderHome();
     renderTickets();
     renderAdmin();
@@ -621,6 +684,7 @@ adminTicketList.addEventListener("submit", async (event) => {
       p_quota: Number(formData.get("quota"))
     });
     await loadData();
+    await loadRushDetails(getCurrentRush().id, true);
     renderHome();
     renderTickets();
     renderAdmin();
@@ -654,6 +718,7 @@ adminTicketList.addEventListener("click", async (event) => {
       p_card_id: ticket.id
     });
     await loadData();
+    await loadRushDetails(getCurrentRush().id, true);
     renderHome();
     renderTickets();
     renderAdmin();
@@ -684,6 +749,7 @@ createCardForm.addEventListener("submit", async (event) => {
     createCardForm.reset();
     createCardForm.querySelector('input[name="quota"]').value = 10;
     await loadData();
+    await loadRushDetails(getCurrentRush().id, true);
     renderHome();
     renderTickets();
     renderAdmin();
@@ -704,6 +770,7 @@ ownedTicketList.addEventListener("click", async (event) => {
       p_qq: state.user.qq
     });
     await loadData();
+    await loadRushDetails(getCurrentRush().id, true);
     renderHome();
     renderTickets();
     renderProfile();
