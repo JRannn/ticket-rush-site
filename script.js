@@ -68,6 +68,32 @@ function isRushOpen(rush = getCurrentRush()) {
   return Date.now() >= new Date(rush.start_time).getTime();
 }
 
+function formatRushTime(isoValue) {
+  const date = new Date(isoValue);
+  if (Number.isNaN(date.getTime())) return "时间待定";
+
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${month}月${day}日 ${hours}:${minutes}`;
+}
+
+function formatRemainingTime(isoValue) {
+  const remaining = new Date(isoValue).getTime() - Date.now();
+  if (remaining <= 0) return "";
+
+  const totalSeconds = Math.floor(remaining / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return days > 0 ? `${days}天 ${hh}:${mm}:${ss}` : `${hh}:${mm}:${ss}`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -386,6 +412,19 @@ function rushStatusMarkup(rush) {
     : '<span class="status-pill pending">待开卡</span>';
 }
 
+function rushTimeMarkup(rush) {
+  const timeText = formatRushTime(rush.start_time);
+  if (isRushSoldOut(rush)) {
+    return `<p class="rush-time">已结束 · ${escapeHtml(timeText)}</p>`;
+  }
+
+  if (isRushOpen(rush)) {
+    return `<p class="rush-time">${escapeHtml(timeText)}</p>`;
+  }
+
+  return `<p class="rush-time countdown">距离开卡 ${escapeHtml(formatRemainingTime(rush.start_time))} · ${escapeHtml(timeText)}</p>`;
+}
+
 function renderHome() {
   createRushForm.classList.toggle("visible", isSuperAdmin());
 
@@ -409,6 +448,7 @@ function renderHome() {
           <div>
             ${rushStatusMarkup(rush)}
             <h3>${escapeHtml(rush.title)}</h3>
+            ${rushTimeMarkup(rush)}
             <p>卡种 ${tickets.length} 个 · 已抢 ${claimCount} 张</p>
           </div>
           <button type="button" class="grab-button">进入</button>
@@ -468,6 +508,10 @@ function updateCountdown() {
   const label = document.querySelector("#rushLabel");
   const countdownText = document.querySelector("#countdownText");
 
+  if (homeView.classList.contains("active")) {
+    renderHome();
+  }
+
   if (remaining <= 0) {
     label.textContent = "已开卡";
     countdownText.textContent = "开卡中";
@@ -480,17 +524,9 @@ function updateCountdown() {
   }
 
   lastRushOpen = false;
-  const totalSeconds = Math.floor(remaining / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const hh = String(hours).padStart(2, "0");
-  const mm = String(minutes).padStart(2, "0");
-  const ss = String(seconds).padStart(2, "0");
 
   label.textContent = "距离开卡";
-  countdownText.textContent = days > 0 ? `${days}天 ${hh}:${mm}:${ss}` : `${hh}:${mm}:${ss}`;
+  countdownText.textContent = formatRemainingTime(rush.start_time);
 }
 
 function toDateTimeLocalValue(isoValue) {
