@@ -259,6 +259,11 @@ input:focus {
   background: var(--gold);
 }
 
+.status-pill.ended {
+  color: #fff;
+  background: #8d8798;
+}
+
 .hero-band {
   display: flex;
   justify-content: space-between;
@@ -478,6 +483,10 @@ input:focus {
 
 .grab-button.done {
   background: var(--ink);
+}
+
+.grab-button.sold-out {
+  background: #8d8798;
 }
 
 .grab-button:disabled {
