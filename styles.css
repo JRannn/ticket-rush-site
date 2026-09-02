@@ -119,6 +119,7 @@ input:focus {
 .primary-action,
 .secondary-action,
 .grab-button,
+.delete-card-button,
 .return-button,
 .nav-button {
   border: 0;
@@ -257,6 +258,61 @@ input:focus {
   border-radius: 6px;
   background-size: cover;
   background-position: center;
+}
+
+.image-carousel {
+  position: relative;
+  min-height: 170px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #f2edf7;
+}
+
+.carousel-slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.carousel-slide.active {
+  opacity: 1;
+}
+
+.carousel-button {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(23, 21, 31, 0.72);
+  font-size: 24px;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.carousel-button.prev {
+  left: 10px;
+}
+
+.carousel-button.next {
+  right: 10px;
+}
+
+.carousel-count {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(23, 21, 31, 0.72);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .ticket-image.aurora {
@@ -435,6 +491,7 @@ input:focus {
 .owned-thumb {
   width: 76px;
   height: 58px;
+  min-height: 58px;
   border-radius: 6px;
   background-size: cover;
   background-position: center;
@@ -532,6 +589,20 @@ input:focus {
 
 .admin-fields .grab-button {
   align-self: end;
+}
+
+.admin-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.delete-card-button {
+  min-width: 116px;
+  padding: 12px 16px;
+  color: #fff;
+  background: var(--red);
 }
 
 .rush-status small {
