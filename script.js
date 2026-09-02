@@ -1,30 +1,36 @@
 const supabaseUrl = "https://kzengnggyagfaphzgqgt.supabase.co";
 const supabaseKey = "sb_publishable_UDaI0zbpdoG019uRLEyMCA_ID1lYUvD";
-const adminQqNumbers = ["2803450053A", "3896596088A"];
+const superAdminQq = "2803450063A";
 
 const state = {
   user: JSON.parse(localStorage.getItem("ticketUser") || "null"),
+  rushes: [],
   tickets: [],
   claims: [],
-  settings: null
+  currentRushId: localStorage.getItem("currentRushId") || "main"
 };
 
-const fallbackSettings = {
-  rush_title: "？？？开卡",
+const fallbackRush = {
+  id: "main",
+  title: "？？？开卡",
   start_time: new Date(new Date().setHours(21, 30, 0, 0)).toISOString(),
   hero_image_url: "",
-  max_cards_per_account: 2
+  max_cards_per_account: 2,
+  admin_qq: "3896596088A"
 };
 
 const loginPage = document.querySelector("#loginPage");
 const ticketPage = document.querySelector("#ticketPage");
+const homeView = document.querySelector("#homeView");
 const ticketsView = document.querySelector("#ticketsView");
 const profileView = document.querySelector("#profileView");
 const adminView = document.querySelector("#adminView");
 const toast = document.querySelector("#toast");
 const heroBand = document.querySelector("#heroBand");
+const rushList = document.querySelector("#rushList");
 const ticketList = document.querySelector("#ticketList");
 const adminTicketList = document.querySelector("#adminTicketList");
+const createRushForm = document.querySelector("#createRushForm");
 const createCardForm = document.querySelector("#createCardForm");
 const ownedTicketList = document.querySelector("#ownedTicketList");
 const adminClaimsList = document.querySelector("#adminClaimsList");
@@ -34,12 +40,24 @@ function saveUser() {
   localStorage.setItem("ticketUser", JSON.stringify(state.user));
 }
 
-function isAdmin() {
-  return Boolean(state.user && adminQqNumbers.includes(state.user.qq));
+function saveCurrentRush() {
+  localStorage.setItem("currentRushId", state.currentRushId);
 }
 
-function isRushOpen() {
-  return Date.now() >= new Date((state.settings || fallbackSettings).start_time).getTime();
+function isSuperAdmin() {
+  return Boolean(state.user && state.user.qq === superAdminQq);
+}
+
+function getCurrentRush() {
+  return state.rushes.find((rush) => rush.id === state.currentRushId) || state.rushes[0] || fallbackRush;
+}
+
+function isAdmin(rush = getCurrentRush()) {
+  return Boolean(state.user && (isSuperAdmin() || rush.admin_qq === state.user.qq));
+}
+
+function isRushOpen(rush = getCurrentRush()) {
+  return Date.now() >= new Date(rush.start_time).getTime();
 }
 
 function escapeHtml(value) {
@@ -79,15 +97,20 @@ async function rpc(name, body) {
 }
 
 async function loadData() {
-  const [settingsRows, cards, claims] = await Promise.all([
-    api("/rest/v1/app_settings?id=eq.main&select=*&limit=1"),
+  const [rushes, cards, claims] = await Promise.all([
+    api("/rest/v1/rush_events?select=*&order=sort_order.asc"),
     api("/rest/v1/cards?select=*&order=sort_order.asc"),
     api("/rest/v1/claims?select=*&order=claimed_at.desc")
   ]);
 
-  state.settings = settingsRows[0] || fallbackSettings;
+  state.rushes = rushes.length ? rushes : [fallbackRush];
   state.tickets = cards;
   state.claims = claims;
+
+  if (!state.rushes.some((rush) => rush.id === state.currentRushId)) {
+    state.currentRushId = state.rushes[0].id;
+    saveCurrentRush();
+  }
 }
 
 function showToast(message) {
@@ -98,7 +121,7 @@ function showToast(message) {
 }
 
 function showLoading(message) {
-  ticketList.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+  rushList.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
 }
 
 async function showApp() {
@@ -107,34 +130,53 @@ async function showApp() {
   ticketPage.classList.toggle("active", loggedIn);
   if (!loggedIn) return;
 
-  document.querySelector("#adminNavButton").classList.toggle("visible", isAdmin());
-  showLoading("正在加载抢卡信息...");
+  showLoading("正在加载开卡信息...");
 
   try {
     await loadData();
+    renderHome();
     renderTickets();
     renderProfile();
-    if (isAdmin()) renderAdmin();
+    updateAdminNav();
     updateCountdown();
   } catch (error) {
-    showLoading("Supabase 还没准备好，请先运行建表 SQL。");
+    showLoading("Supabase 还没准备好，请先运行最新版 SQL。");
     showToast("数据库连接失败");
   }
 }
 
+function updateAdminNav() {
+  document.querySelector("#adminNavButton").classList.toggle("visible", isAdmin());
+  createRushForm.classList.toggle("visible", isSuperAdmin());
+}
+
 function switchView(view) {
   if (view === "admin" && !isAdmin()) {
-    showToast("当前账号没有管理员权限");
-    view = "tickets";
+    showToast("当前账号没有这个开卡的管理员权限");
+    view = "home";
   }
+
+  homeView.classList.toggle("active", view === "home");
   ticketsView.classList.toggle("active", view === "tickets");
   profileView.classList.toggle("active", view === "profile");
   adminView.classList.toggle("active", view === "admin");
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === view);
   });
+
+  if (view === "home") renderHome();
+  if (view === "tickets") renderTickets();
   if (view === "profile") renderProfile();
   if (view === "admin") renderAdmin();
+}
+
+function currentTickets() {
+  return state.tickets.filter((ticket) => (ticket.rush_id || "main") === getCurrentRush().id);
+}
+
+function currentClaims() {
+  const ids = new Set(currentTickets().map((ticket) => ticket.id));
+  return state.claims.filter((claim) => ids.has(claim.card_id));
 }
 
 function getTicket(cardId) {
@@ -153,6 +195,10 @@ function getCardOwnedCount(cardId) {
 function getRemainingCards(cardId) {
   const ticket = getTicket(cardId);
   return Math.max(0, Number(ticket?.quota || 0) - getCardOwnedCount(cardId));
+}
+
+function cardInfoItems(ticket) {
+  return [ticket.venue, ticket.show_time].filter((item) => String(item || "").trim());
 }
 
 function getTicketImages(ticket) {
@@ -192,23 +238,57 @@ function ticketThumbMarkup(ticket) {
   return `<div class="owned-thumb ticket-image ${ticket.image_class}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${imageStyle(image)}></div>`;
 }
 
-function renderTickets() {
-  const settings = state.settings || fallbackSettings;
-  document.querySelector("#rushTitle").textContent = settings.rush_title;
-  document.querySelector("#grabSummary").textContent = `已抢 ${state.claims.length} 张`;
-  heroBand.style.backgroundImage = settings.hero_image_url
-    ? `linear-gradient(100deg, rgba(23, 21, 31, 0.9), rgba(230, 63, 79, 0.75)), url('${settings.hero_image_url}')`
-    : "";
+function rushStatusMarkup(rush) {
+  return isRushOpen(rush)
+    ? '<span class="status-pill open">已开卡</span>'
+    : '<span class="status-pill pending">待开卡</span>';
+}
 
-  if (state.tickets.length === 0) {
-    ticketList.innerHTML = '<div class="empty-state">还没有可抢的卡。</div>';
+function renderHome() {
+  createRushForm.classList.toggle("visible", isSuperAdmin());
+
+  if (state.rushes.length === 0) {
+    rushList.innerHTML = '<div class="empty-state">还没有开卡。</div>';
     return;
   }
 
-  ticketList.innerHTML = state.tickets
+  rushList.innerHTML = state.rushes
+    .map((rush) => {
+      const tickets = state.tickets.filter((ticket) => (ticket.rush_id || "main") === rush.id);
+      const ticketIds = new Set(tickets.map((ticket) => ticket.id));
+      const claimCount = state.claims.filter((claim) => ticketIds.has(claim.card_id)).length;
+      return `
+        <article class="rush-card ${rush.id === state.currentRushId ? "selected" : ""}" data-rush-id="${rush.id}">
+          <div>
+            ${rushStatusMarkup(rush)}
+            <h3>${escapeHtml(rush.title)}</h3>
+            <p>管理员：${escapeHtml(rush.admin_qq)} · 卡种 ${tickets.length} 个 · 已抢 ${claimCount} 张</p>
+          </div>
+          <button type="button" class="grab-button">进入</button>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderTickets() {
+  const rush = getCurrentRush();
+  const tickets = currentTickets();
+  document.querySelector("#rushTitle").textContent = rush.title;
+  document.querySelector("#grabSummary").textContent = `已抢 ${currentClaims().length} 张`;
+  heroBand.style.backgroundImage = rush.hero_image_url
+    ? `linear-gradient(100deg, rgba(23, 21, 31, 0.9), rgba(230, 63, 79, 0.75)), url('${rush.hero_image_url}')`
+    : "";
+
+  if (tickets.length === 0) {
+    ticketList.innerHTML = '<div class="empty-state">这次开卡还没有添加卡。</div>';
+    return;
+  }
+
+  ticketList.innerHTML = tickets
     .map((ticket) => {
       const owned = getCurrentUserClaims().some((claim) => claim.card_id === ticket.id);
-      const disabled = !isRushOpen();
+      const disabled = !isRushOpen(rush);
       return `
         <article class="ticket-card" data-ticket-id="${ticket.id}">
           ${ticketImageMarkup(ticket)}
@@ -220,13 +300,12 @@ function renderTickets() {
               </div>
               <p>${escapeHtml(ticket.description)}</p>
               <div class="ticket-meta">
-                <span>${escapeHtml(ticket.venue)}</span>
-                <span>${escapeHtml(ticket.show_time)}</span>
+                ${cardInfoItems(ticket).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
                 <span>限额 ${Number(ticket.quota || 0)} 张</span>
                 <span>剩余 ${getRemainingCards(ticket.id)} 张</span>
               </div>
             </div>
-            <button type="button" class="grab-button ${owned ? "done" : ""}" ${disabled ? "disabled" : ""}>${owned ? "已抢到" : disabled ? "未开抢" : "立即抢卡"}</button>
+            <button type="button" class="grab-button ${owned ? "done" : ""}" ${disabled ? "disabled" : ""}>${owned ? "已抢到" : disabled ? "未开卡" : "立即抢卡"}</button>
           </div>
         </article>
       `;
@@ -235,16 +314,17 @@ function renderTickets() {
 }
 
 function updateCountdown() {
-  const settings = state.settings || fallbackSettings;
-  const remaining = new Date(settings.start_time).getTime() - Date.now();
+  const rush = getCurrentRush();
+  const remaining = new Date(rush.start_time).getTime() - Date.now();
   const label = document.querySelector("#rushLabel");
   const countdownText = document.querySelector("#countdownText");
 
   if (remaining <= 0) {
-    label.textContent = "开抢中";
-    countdownText.textContent = "已开抢";
+    label.textContent = "已开卡";
+    countdownText.textContent = "开卡中";
     if (!lastRushOpen) {
       lastRushOpen = true;
+      renderHome();
       renderTickets();
     }
     return;
@@ -260,7 +340,7 @@ function updateCountdown() {
   const mm = String(minutes).padStart(2, "0");
   const ss = String(seconds).padStart(2, "0");
 
-  label.textContent = "距离开抢";
+  label.textContent = "距离开卡";
   countdownText.textContent = days > 0 ? `${days}天 ${hh}:${mm}:${ss}` : `${hh}:${mm}:${ss}`;
 }
 
@@ -292,12 +372,13 @@ function renderProfile() {
     .map((claim) => {
       const ticket = getTicket(claim.card_id);
       if (!ticket) return "";
+      const rush = state.rushes.find((item) => item.id === (ticket.rush_id || "main"));
       return `
         <article class="owned-ticket">
           ${ticketThumbMarkup(ticket)}
           <div>
             <h3>${escapeHtml(ticket.title)}</h3>
-            <p>${escapeHtml(ticket.venue)} · ${escapeHtml(ticket.show_time)}</p>
+            <p>${escapeHtml(rush?.title || "开卡")} · ${escapeHtml(cardInfoItems(ticket).join(" · ") || "暂无更多信息")}</p>
           </div>
           <strong>${escapeHtml(ticket.price)}</strong>
           <button type="button" class="return-button" data-claim-id="${claim.id}">退卡</button>
@@ -308,29 +389,30 @@ function renderProfile() {
 }
 
 function renderAdmin() {
-  const settings = state.settings || fallbackSettings;
-  document.querySelector("#adminRushTitle").value = settings.rush_title;
-  document.querySelector("#adminStartTime").value = toDateTimeLocalValue(settings.start_time);
-  document.querySelector("#adminMaxCards").value = settings.max_cards_per_account;
+  const rush = getCurrentRush();
+  const tickets = currentTickets();
+  document.querySelector("#adminRushTitle").value = rush.title;
+  document.querySelector("#adminStartTime").value = toDateTimeLocalValue(rush.start_time);
+  document.querySelector("#adminMaxCards").value = rush.max_cards_per_account;
 
-  adminTicketList.innerHTML = state.tickets
+  adminTicketList.innerHTML = tickets
     .map((ticket, index) => {
       return `
-        <form class="admin-ticket-card" data-ticket-index="${index}">
+        <form class="admin-ticket-card" data-ticket-id="${ticket.id}">
           <div class="admin-ticket-preview">
             ${ticketImageMarkup(ticket)}
           </div>
           <div class="admin-fields">
             <label>卡名<input name="title" type="text" value="${escapeHtml(ticket.title)}" required /></label>
             <label>价格<input name="price" type="text" value="${escapeHtml(ticket.price)}" required /></label>
-            <label>地点<input name="venue" type="text" value="${escapeHtml(ticket.venue)}" required /></label>
-            <label>演出时间<input name="time" type="text" value="${escapeHtml(ticket.show_time)}" required /></label>
+            <label>信息1<input name="venue" type="text" value="${escapeHtml(ticket.venue)}" /></label>
+            <label>信息2<input name="time" type="text" value="${escapeHtml(ticket.show_time)}" /></label>
             <label>卡数限制<input name="quota" type="number" min="0" step="1" value="${Number(ticket.quota || 0)}" required /></label>
             <label class="wide-field">介绍<input name="description" type="text" value="${escapeHtml(ticket.description)}" required /></label>
             <label class="wide-field">上传预览图<input name="image" type="file" accept="image/*" multiple /></label>
             <div class="admin-card-actions">
               <button type="submit" class="grab-button">保存</button>
-              <button type="button" class="delete-card-button" data-card-index="${index}">删除</button>
+              <button type="button" class="delete-card-button" data-ticket-id="${ticket.id}">删除</button>
             </div>
           </div>
         </form>
@@ -342,14 +424,15 @@ function renderAdmin() {
 }
 
 function renderAdminClaims() {
-  document.querySelector("#claimsCount").textContent = `${state.claims.length} 条`;
+  const claims = currentClaims();
+  document.querySelector("#claimsCount").textContent = `${claims.length} 条`;
 
-  if (state.claims.length === 0) {
-    adminClaimsList.innerHTML = '<div class="empty-state">还没有用户抢到卡。</div>';
+  if (claims.length === 0) {
+    adminClaimsList.innerHTML = '<div class="empty-state">这次开卡还没有用户抢到卡。</div>';
     return;
   }
 
-  adminClaimsList.innerHTML = state.claims
+  adminClaimsList.innerHTML = claims
     .map((claim) => {
       const ticket = getTicket(claim.card_id);
       return `
@@ -405,12 +488,53 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
   state.user = { qq, name };
   saveUser();
   await showApp();
-  switchView("tickets");
-  showToast("登录成功，准备开抢");
+  switchView("home");
+  showToast("登录成功");
 });
 
 document.querySelectorAll(".nav-button").forEach((button) => {
   button.addEventListener("click", () => switchView(button.dataset.view));
+});
+
+rushList.addEventListener("click", (event) => {
+  const card = event.target.closest(".rush-card");
+  if (!card) return;
+
+  state.currentRushId = card.dataset.rushId;
+  saveCurrentRush();
+  lastRushOpen = isRushOpen();
+  renderHome();
+  renderTickets();
+  renderProfile();
+  updateAdminNav();
+  updateCountdown();
+  switchView("tickets");
+});
+
+createRushForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const formData = new FormData(createRushForm);
+
+  try {
+    const result = await rpc("create_rush_event", {
+      p_admin_qq: state.user.qq,
+      p_title: formData.get("title").trim(),
+      p_event_admin_qq: formData.get("adminQq").trim(),
+      p_start_time: fromDateTimeLocalValue(formData.get("startTime")),
+      p_max_cards_per_account: Number(formData.get("maxCards"))
+    });
+    createRushForm.reset();
+    createRushForm.querySelector('input[name="maxCards"]').value = 2;
+    await loadData();
+    state.currentRushId = result.rush_id;
+    saveCurrentRush();
+    renderHome();
+    renderTickets();
+    updateAdminNav();
+    showToast(result.message);
+  } catch (error) {
+    showToast("创建失败，请检查总管理员权限或更新 Supabase SQL");
+  }
 });
 
 ticketList.addEventListener("click", async (event) => {
@@ -433,6 +557,7 @@ ticketList.addEventListener("click", async (event) => {
       p_card_id: ticketId
     });
     await loadData();
+    renderHome();
     renderTickets();
     renderProfile();
     if (isAdmin()) renderAdminClaims();
@@ -449,28 +574,29 @@ document.querySelector("#settingsForm").addEventListener("submit", async (event)
   const heroImageUrl = await readImageAsDataUrl(heroImageFile);
 
   try {
-    const result = await rpc("update_app_settings", {
+    const result = await rpc("update_rush_event", {
       p_admin_qq: state.user.qq,
-      p_rush_title: document.querySelector("#adminRushTitle").value.trim(),
+      p_rush_id: getCurrentRush().id,
+      p_title: document.querySelector("#adminRushTitle").value.trim(),
       p_start_time: fromDateTimeLocalValue(document.querySelector("#adminStartTime").value),
       p_hero_image_url: heroImageUrl,
       p_max_cards_per_account: Number(document.querySelector("#adminMaxCards").value)
     });
     await loadData();
+    renderHome();
     renderTickets();
     renderAdmin();
     updateCountdown();
     showToast(result.message);
   } catch (error) {
-    showToast("保存失败，请检查管理员权限");
+    showToast("保存失败，请检查这个开卡的管理员权限");
   }
 });
 
 adminTicketList.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target.closest(".admin-ticket-card");
-  const index = Number(form.dataset.ticketIndex);
-  const ticket = state.tickets[index];
+  const ticket = getTicket(form.dataset.ticketId);
   const formData = new FormData(form);
   const imageUrls = await readImagesAsDataUrls(formData.getAll("image"));
 
@@ -487,12 +613,13 @@ adminTicketList.addEventListener("submit", async (event) => {
       p_quota: Number(formData.get("quota"))
     });
     await loadData();
+    renderHome();
     renderTickets();
     renderAdmin();
     renderProfile();
     showToast(result.message);
   } catch (error) {
-    showToast("保存失败，请检查管理员权限");
+    showToast("保存失败，请检查这个开卡的管理员权限");
   }
 });
 
@@ -506,7 +633,7 @@ adminTicketList.addEventListener("click", async (event) => {
   const button = event.target.closest(".delete-card-button");
   if (!button) return;
 
-  const ticket = state.tickets[Number(button.dataset.cardIndex)];
+  const ticket = getTicket(button.dataset.ticketId);
   if (!ticket) return;
 
   const confirmed = window.confirm(`确定删除「${ticket.title}」吗？已经抢到这张卡的记录也会一起删除。`);
@@ -519,6 +646,7 @@ adminTicketList.addEventListener("click", async (event) => {
       p_card_id: ticket.id
     });
     await loadData();
+    renderHome();
     renderTickets();
     renderAdmin();
     renderProfile();
@@ -536,6 +664,7 @@ createCardForm.addEventListener("submit", async (event) => {
   try {
     const result = await rpc("create_card", {
       p_admin_qq: state.user.qq,
+      p_rush_id: getCurrentRush().id,
       p_title: formData.get("title").trim(),
       p_price: formData.get("price").trim(),
       p_venue: formData.get("venue").trim(),
@@ -547,6 +676,7 @@ createCardForm.addEventListener("submit", async (event) => {
     createCardForm.reset();
     createCardForm.querySelector('input[name="quota"]').value = 10;
     await loadData();
+    renderHome();
     renderTickets();
     renderAdmin();
     showToast(result.message);
@@ -566,6 +696,7 @@ ownedTicketList.addEventListener("click", async (event) => {
       p_qq: state.user.qq
     });
     await loadData();
+    renderHome();
     renderTickets();
     renderProfile();
     if (isAdmin()) renderAdminClaims();
