@@ -33,13 +33,43 @@
             <h1 id="ticketTitle">抢卡大厅</h1>
           </div>
           <nav class="nav-actions" aria-label="页面导航">
-            <button class="nav-button active" type="button" data-view="tickets">抢卡</button>
+            <button class="nav-button active" type="button" data-view="home">首页</button>
+            <button class="nav-button" type="button" data-view="tickets">抢卡</button>
             <button class="nav-button" type="button" data-view="profile">我的</button>
             <button id="adminNavButton" class="nav-button admin-only" type="button" data-view="admin">管理</button>
           </nav>
         </header>
 
-        <div id="ticketsView" class="content-view active">
+        <div id="homeView" class="content-view active">
+          <section class="home-layout">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Rush List</p>
+                <h2>开卡大厅</h2>
+              </div>
+            </div>
+
+            <form id="createRushForm" class="admin-create-card super-only">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">Create</p>
+                  <h2>创建开卡</h2>
+                </div>
+              </div>
+              <div class="admin-fields">
+                <label>开卡名称<input name="title" type="text" required /></label>
+                <label>管理员QQ<input name="adminQq" type="text" required /></label>
+                <label>开卡时间<input name="startTime" type="datetime-local" required /></label>
+                <label>单账号限额<input name="maxCards" type="number" min="0" step="1" value="2" required /></label>
+                <button type="submit" class="primary-action">创建开卡</button>
+              </div>
+            </form>
+
+            <div id="rushList" class="rush-list"></div>
+          </section>
+        </div>
+
+        <div id="ticketsView" class="content-view">
           <section id="heroBand" class="hero-band" aria-label="抢卡状态">
             <div>
               <p>今日热抢</p>
@@ -117,8 +147,8 @@
               <div class="admin-fields">
                 <label>卡名<input name="title" type="text" required /></label>
                 <label>价格<input name="price" type="text" required /></label>
-                <label>地点<input name="venue" type="text" required /></label>
-                <label>演出时间<input name="time" type="text" required /></label>
+                <label>信息1<input name="venue" type="text" /></label>
+                <label>信息2<input name="time" type="text" /></label>
                 <label>卡数限制<input name="quota" type="number" min="0" step="1" value="10" required /></label>
                 <label class="wide-field">介绍<input name="description" type="text" required /></label>
                 <label class="wide-field">上传预览图<input name="image" type="file" accept="image/*" multiple /></label>
