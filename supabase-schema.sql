@@ -2,7 +2,7 @@ create extension if not exists pgcrypto;
 
 create table if not exists public.app_settings (
   id text primary key default 'main',
-  rush_title text not null default '星河巡演 · 上海站',
+  rush_title text not null default '？？？开卡',
   start_time timestamptz not null default (date_trunc('day', now()) + interval '21 hours 30 minutes'),
   hero_image_url text not null default '',
   max_cards_per_account integer not null default 2
@@ -17,9 +17,17 @@ create table if not exists public.cards (
   description text not null,
   image_class text not null default 'aurora',
   image_url text not null default '',
+  image_urls jsonb not null default '[]'::jsonb,
   quota integer not null default 10,
   sort_order integer not null default 0
 );
+
+alter table public.cards add column if not exists image_urls jsonb not null default '[]'::jsonb;
+
+update public.cards
+set image_urls = jsonb_build_array(image_url)
+where image_url <> ''
+  and image_urls = '[]'::jsonb;
 
 create table if not exists public.claims (
   id uuid primary key default gen_random_uuid(),
@@ -43,7 +51,7 @@ create policy "Public can read cards" on public.cards for select using (true);
 create policy "Public can read claims" on public.claims for select using (true);
 
 insert into public.app_settings (id, rush_title, max_cards_per_account)
-values ('main', '星河巡演 · 上海站', 2)
+values ('main', '？？？开卡', 2)
 on conflict (id) do nothing;
 
 insert into public.cards (id, title, price, venue, show_time, description, image_class, quota, sort_order)
@@ -161,7 +169,7 @@ create or replace function public.update_card(
   p_venue text,
   p_show_time text,
   p_description text,
-  p_image_url text,
+  p_image_urls jsonb,
   p_quota integer
 )
 returns jsonb
@@ -180,7 +188,14 @@ begin
       venue = p_venue,
       show_time = p_show_time,
       description = p_description,
-      image_url = coalesce(p_image_url, image_url),
+      image_url = case
+        when p_image_urls is null or jsonb_array_length(p_image_urls) = 0 then image_url
+        else coalesce(p_image_urls->>0, image_url)
+      end,
+      image_urls = case
+        when p_image_urls is null or jsonb_array_length(p_image_urls) = 0 then image_urls
+        else p_image_urls
+      end,
       quota = p_quota
   where id = p_card_id;
 
@@ -195,7 +210,7 @@ create or replace function public.create_card(
   p_venue text,
   p_show_time text,
   p_description text,
-  p_image_url text,
+  p_image_urls jsonb,
   p_quota integer
 )
 returns jsonb
@@ -223,6 +238,7 @@ begin
     description,
     image_class,
     image_url,
+    image_urls,
     quota,
     sort_order
   )
@@ -234,7 +250,8 @@ begin
     p_show_time,
     p_description,
     'aurora',
-    coalesce(p_image_url, ''),
+    coalesce(p_image_urls->>0, ''),
+    coalesce(p_image_urls, '[]'::jsonb),
     p_quota,
     v_sort_order
   );
@@ -243,8 +260,33 @@ begin
 end;
 $$;
 
+create or replace function public.delete_card(
+  p_admin_qq text,
+  p_card_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_card_admin(p_admin_qq) then
+    return jsonb_build_object('ok', false, 'message', '当前账号没有管理员权限');
+  end if;
+
+  delete from public.cards where id = p_card_id;
+
+  if not found then
+    return jsonb_build_object('ok', false, 'message', '这张卡不存在');
+  end if;
+
+  return jsonb_build_object('ok', true, 'message', '卡片已删除');
+end;
+$$;
+
 grant execute on function public.claim_card(text, text, text) to anon;
 grant execute on function public.return_card(uuid, text) to anon;
 grant execute on function public.update_app_settings(text, text, timestamptz, text, integer) to anon;
-grant execute on function public.update_card(text, text, text, text, text, text, text, text, integer) to anon;
-grant execute on function public.create_card(text, text, text, text, text, text, text, integer) to anon;
+grant execute on function public.update_card(text, text, text, text, text, text, text, jsonb, integer) to anon;
+grant execute on function public.create_card(text, text, text, text, text, text, jsonb, integer) to anon;
+grant execute on function public.delete_card(text, text) to anon;
