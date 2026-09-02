@@ -54,6 +54,11 @@ insert into public.app_settings (id, rush_title, max_cards_per_account)
 values ('main', '？？？开卡', 2)
 on conflict (id) do nothing;
 
+update public.app_settings
+set rush_title = '？？？开卡'
+where id = 'main'
+  and rush_title = '星河巡演 · 上海站';
+
 insert into public.cards (id, title, price, venue, show_time, description, image_class, quota, sort_order)
 values
   ('aurora-vip', '星河巡演 · VIP内场', '¥1280', '上海梅赛德斯中心', '10月18日 19:30', '近距离内场视角，含纪念手环与提前入场通道。', 'aurora', 20, 1),
