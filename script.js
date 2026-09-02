@@ -305,6 +305,24 @@ function getRemainingCards(cardId) {
   return Math.max(0, Number(ticket?.quota || 0) - getCardOwnedCount(cardId));
 }
 
+function getRushTickets(rushId) {
+  return state.tickets.filter((ticket) => (ticket.rush_id || "main") === rushId);
+}
+
+function getRushClaimCount(rushId) {
+  const ticketIds = new Set(getRushTickets(rushId).map((ticket) => ticket.id));
+  return state.claims.filter((claim) => ticketIds.has(claim.card_id)).length;
+}
+
+function getRushRemainingCount(rushId) {
+  return getRushTickets(rushId).reduce((total, ticket) => total + getRemainingCards(ticket.id), 0);
+}
+
+function isRushSoldOut(rush) {
+  const tickets = getRushTickets(rush.id);
+  return tickets.length > 0 && getRushRemainingCount(rush.id) <= 0;
+}
+
 function cardInfoItems(ticket) {
   return [ticket.venue, ticket.show_time].filter((item) => String(item || "").trim());
 }
@@ -359,6 +377,10 @@ function rushPreviewStyle(rush) {
 }
 
 function rushStatusMarkup(rush) {
+  if (isRushSoldOut(rush)) {
+    return '<span class="status-pill ended">已结束</span>';
+  }
+
   return isRushOpen(rush)
     ? '<span class="status-pill open">已开卡</span>'
     : '<span class="status-pill pending">待开卡</span>';
@@ -372,11 +394,15 @@ function renderHome() {
     return;
   }
 
-  rushList.innerHTML = state.rushes
+  rushList.innerHTML = [...state.rushes]
+    .sort((a, b) => {
+      const soldOutSort = Number(isRushSoldOut(a)) - Number(isRushSoldOut(b));
+      if (soldOutSort !== 0) return soldOutSort;
+      return Number(a.sort_order || 0) - Number(b.sort_order || 0);
+    })
     .map((rush) => {
-      const tickets = state.tickets.filter((ticket) => (ticket.rush_id || "main") === rush.id);
-      const ticketIds = new Set(tickets.map((ticket) => ticket.id));
-      const claimCount = state.claims.filter((claim) => ticketIds.has(claim.card_id)).length;
+      const tickets = getRushTickets(rush.id);
+      const claimCount = getRushClaimCount(rush.id);
       return `
         <article class="rush-card ${rush.id === state.currentRushId ? "selected" : ""}" data-rush-id="${rush.id}">
           <div class="rush-preview" role="img" aria-label="${escapeHtml(rush.title)}主预览图"${rushPreviewStyle(rush)}></div>
@@ -410,6 +436,8 @@ function renderTickets(isLoadingDetails = false) {
     .map((ticket) => {
       const owned = getCurrentUserClaims().some((claim) => claim.card_id === ticket.id);
       const disabled = !isRushOpen(rush);
+      const soldOut = getRemainingCards(ticket.id) <= 0;
+      const buttonText = owned ? "已抢到" : soldOut ? "已抢完" : disabled ? "未开卡" : "立即抢卡";
       return `
         <article class="ticket-card" data-ticket-id="${ticket.id}">
           ${ticketImageMarkup(ticket)}
@@ -426,7 +454,7 @@ function renderTickets(isLoadingDetails = false) {
                 <span>剩余 ${getRemainingCards(ticket.id)} 张</span>
               </div>
             </div>
-            <button type="button" class="grab-button ${owned ? "done" : ""}" ${disabled ? "disabled" : ""}>${owned ? "已抢到" : disabled ? "未开卡" : "立即抢卡"}</button>
+            <button type="button" class="grab-button ${owned ? "done" : soldOut ? "sold-out" : ""}" ${(disabled || soldOut) && !owned ? "disabled" : ""}>${buttonText}</button>
           </div>
         </article>
       `;
