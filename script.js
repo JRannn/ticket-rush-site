@@ -1,6 +1,6 @@
 const supabaseUrl = "https://kzengnggyagfaphzgqgt.supabase.co";
 const supabaseKey = "sb_publishable_UDaI0zbpdoG019uRLEyMCA_ID1lYUvD";
-const superAdminQq = "2803450063A";
+const superAdminQq = "2803450053A";
 
 const state = {
   user: JSON.parse(localStorage.getItem("ticketUser") || "null"),
