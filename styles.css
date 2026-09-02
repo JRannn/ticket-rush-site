@@ -239,6 +239,17 @@ input:focus {
   line-height: 1.6;
 }
 
+.rush-card .rush-time {
+  margin: 0 0 8px;
+  color: #4f485a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.rush-card .rush-time.countdown {
+  color: var(--red);
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
