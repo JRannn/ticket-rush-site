@@ -230,6 +230,18 @@ function renderAfterDetailUpdate(rushId) {
   updateAdminNav();
 }
 
+function refreshLightData() {
+  loadData()
+    .then(() => {
+      renderHome();
+      renderTickets();
+      renderProfile();
+      if (isAdmin()) renderAdminClaims();
+      updateAdminNav();
+    })
+    .catch(() => showToast("状态同步较慢，请稍后刷新"));
+}
+
 function showToast(message) {
   toast.textContent = message;
   toast.classList.add("show");
@@ -733,7 +745,9 @@ ticketList.addEventListener("click", async (event) => {
   if (!button) return;
 
   const ticketId = button.closest(".ticket-card").dataset.ticketId;
+  const originalText = button.textContent;
   button.disabled = true;
+  button.textContent = "抢卡中...";
 
   try {
     const result = await rpc("claim_card", {
@@ -741,16 +755,31 @@ ticketList.addEventListener("click", async (event) => {
       p_name: state.user.name,
       p_card_id: ticketId
     });
-    await loadData();
-    await loadRushDetails(getCurrentRush().id, true);
+
+    showToast(result.message);
+    if (!result.ok) {
+      button.disabled = false;
+      button.textContent = originalText;
+      refreshLightData();
+      return;
+    }
+
+    state.claims.unshift({
+      id: result.claim_id || `local-${Date.now()}`,
+      card_id: ticketId,
+      qq: state.user.qq,
+      display_name: state.user.name,
+      claimed_at: new Date().toISOString()
+    });
     renderHome();
     renderTickets();
     renderProfile();
     if (isAdmin()) renderAdminClaims();
-    showToast(result.message);
+    refreshLightData();
   } catch (error) {
     showToast("抢卡失败，请稍后再试");
-    renderTickets();
+    button.disabled = false;
+    button.textContent = originalText;
   }
 });
 
