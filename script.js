@@ -269,14 +269,57 @@ function applyLazyBackground(element) {
   delete element.dataset.bg;
 }
 
+const lazyImageQueue = [];
+const queuedLazyImages = new WeakSet();
+let activeLazyImageLoads = 0;
+const maxConcurrentImageLoads = 2;
+
+function loadQueuedBackground(element) {
+  const url = element.dataset.bg;
+  if (!url) {
+    activeLazyImageLoads -= 1;
+    drainLazyImageQueue();
+    return;
+  }
+
+  const image = new Image();
+  image.onload = () => {
+    applyLazyBackground(element);
+    activeLazyImageLoads -= 1;
+    drainLazyImageQueue();
+  };
+  image.onerror = () => {
+    element.classList.remove("lazy-bg", "deferred-bg");
+    activeLazyImageLoads -= 1;
+    drainLazyImageQueue();
+  };
+  image.src = url;
+}
+
+function drainLazyImageQueue() {
+  while (activeLazyImageLoads < maxConcurrentImageLoads && lazyImageQueue.length > 0) {
+    const element = lazyImageQueue.shift();
+    if (!element.isConnected || !element.dataset.bg) continue;
+    activeLazyImageLoads += 1;
+    loadQueuedBackground(element);
+  }
+}
+
+function enqueueLazyBackground(element) {
+  if (queuedLazyImages.has(element)) return;
+  queuedLazyImages.add(element);
+  lazyImageQueue.push(element);
+  drainLazyImageQueue();
+}
+
 const lazyImageObserver = "IntersectionObserver" in window
   ? new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
-        applyLazyBackground(entry.target);
+        enqueueLazyBackground(entry.target);
         lazyImageObserver.unobserve(entry.target);
       });
-    }, { rootMargin: "300px 0px" })
+    }, { rootMargin: "80px 0px" })
   : null;
 
 function queueLazyBackgrounds(root = document) {
@@ -285,7 +328,7 @@ function queueLazyBackgrounds(root = document) {
     if (lazyImageObserver) {
       lazyImageObserver.observe(element);
     } else {
-      applyLazyBackground(element);
+      enqueueLazyBackground(element);
     }
   });
 }
@@ -791,7 +834,7 @@ function updateCarousel(carousel, direction) {
   slides.forEach((slide, index) => {
     const isActive = index === next;
     slide.classList.toggle("active", isActive);
-    if (isActive) applyLazyBackground(slide);
+    if (isActive) enqueueLazyBackground(slide);
   });
   carousel.querySelector(".carousel-count").textContent = `${next + 1} / ${slides.length}`;
 }
