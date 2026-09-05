@@ -1,5 +1,29 @@
 create extension if not exists pgcrypto;
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'ticket-images',
+  'ticket-images',
+  true,
+  3145728,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Public can read ticket images" on storage.objects;
+drop policy if exists "Public can upload ticket images" on storage.objects;
+
+create policy "Public can read ticket images"
+on storage.objects for select
+using (bucket_id = 'ticket-images');
+
+create policy "Public can upload ticket images"
+on storage.objects for insert
+with check (bucket_id = 'ticket-images');
+
 create table if not exists public.app_settings (
   id text primary key default 'main',
   rush_title text not null default '？？？开卡',
@@ -101,6 +125,26 @@ create table if not exists public.claims (
   unique (card_id, qq)
 );
 
+create index if not exists idx_cards_rush_sort
+on public.cards (rush_id, sort_order);
+
+create index if not exists idx_claims_qq
+on public.claims (qq);
+
+create index if not exists idx_claims_claimed_at
+on public.claims (claimed_at desc);
+
+create index if not exists idx_rush_events_sort
+on public.rush_events (sort_order);
+
+create or replace view public.card_claim_counts as
+select
+  card.id as card_id,
+  count(claim.id)::integer as claim_count
+from public.cards card
+left join public.claims claim on claim.card_id = card.id
+group by card.id;
+
 alter table public.rush_events enable row level security;
 alter table public.app_settings enable row level security;
 alter table public.cards enable row level security;
@@ -115,6 +159,8 @@ create policy "Public can read rush events" on public.rush_events for select usi
 create policy "Public can read settings" on public.app_settings for select using (true);
 create policy "Public can read cards" on public.cards for select using (true);
 create policy "Public can read claims" on public.claims for select using (true);
+
+grant select on public.card_claim_counts to anon;
 
 insert into public.cards (id, rush_id, title, price, venue, show_time, description, image_class, quota, sort_order)
 values
@@ -171,6 +217,8 @@ begin
   end if;
 
   select * into v_rush from public.rush_events where id = v_card.rush_id;
+
+  perform pg_advisory_xact_lock(hashtext(p_qq || ':' || v_card.rush_id));
 
   if now() < v_rush.start_time then
     return jsonb_build_object('ok', false, 'message', '还没到开卡时间，请等倒计时结束');

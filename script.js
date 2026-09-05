@@ -7,6 +7,8 @@ const state = {
   rushes: [],
   tickets: [],
   claims: [],
+  adminClaims: [],
+  claimCounts: {},
   currentRushId: localStorage.getItem("currentRushId") || "main",
   currentView: localStorage.getItem("currentView") || "home",
   loadedRushDetails: new Set()
@@ -132,22 +134,44 @@ async function rpc(name, body) {
 
 async function loadData() {
   const existingCards = new Map(state.tickets.map((ticket) => [ticket.id, ticket]));
-  const [rushes, cards, claims] = await Promise.all([
+  const [rushes, cards, claimCounts, userClaims] = await Promise.all([
     api("/rest/v1/rush_events?select=id,title,start_time,max_cards_per_account,admin_qq,sort_order&order=sort_order.asc"),
     api("/rest/v1/cards?select=id,rush_id,title,price,venue,show_time,description,image_class,quota,sort_order&order=sort_order.asc"),
-    api("/rest/v1/claims?select=*&order=claimed_at.desc")
+    api("/rest/v1/card_claim_counts?select=card_id,claim_count"),
+    state.user
+      ? api(`/rest/v1/claims?select=*&qq=eq.${encodeURIComponent(state.user.qq)}&order=claimed_at.desc`)
+      : Promise.resolve([])
   ]);
 
   state.rushes = rushes.length
     ? rushes.map((rush) => ({ ...rush, hero_image_url: getCurrentRushImage(rush.id) }))
     : [fallbackRush];
   state.tickets = cards.map((card) => ({ ...existingCards.get(card.id), ...card }));
-  state.claims = claims;
+  state.claims = userClaims;
+  state.claimCounts = Object.fromEntries(
+    claimCounts.map((item) => [item.card_id, Number(item.claim_count || 0)])
+  );
 
   if (!state.rushes.some((rush) => rush.id === state.currentRushId)) {
     state.currentRushId = state.rushes[0].id;
     saveCurrentRush();
   }
+}
+
+async function loadAdminClaims() {
+  if (!isAdmin()) {
+    state.adminClaims = [];
+    return;
+  }
+
+  const cardIds = currentTickets().map((ticket) => ticket.id);
+  if (cardIds.length === 0) {
+    state.adminClaims = [];
+    return;
+  }
+
+  const inList = cardIds.map((id) => `"${String(id).replaceAll('"', '\\"')}"`).join(",");
+  state.adminClaims = await api(`/rest/v1/claims?select=*&card_id=in.(${encodeURIComponent(inList)})&order=claimed_at.desc`);
 }
 
 function getCurrentRushImage(rushId) {
@@ -175,11 +199,6 @@ async function loadRushDetails(rushId, force = false) {
     state.loadedRushDetails.delete(rushId);
   }
 
-  const cardIds = currentTickets()
-    .filter((ticket) => (ticket.rush_id || "main") === rushId)
-    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
-    .map((ticket) => ticket.id);
-
   const rushRows = await api(`/rest/v1/rush_events?select=*&id=eq.${encodeURIComponent(rushId)}`);
 
   if (rushRows[0]) {
@@ -187,21 +206,8 @@ async function loadRushDetails(rushId, force = false) {
   }
   renderAfterDetailUpdate(rushId);
 
-  if (cardIds.length === 0) {
-    state.loadedRushDetails.add(rushId);
-    renderAfterDetailUpdate(rushId);
-    return;
-  }
-
-  await Promise.allSettled(
-    cardIds.map(async (cardId) => {
-      const cards = await api(`/rest/v1/cards?select=*&id=eq.${encodeURIComponent(cardId)}`);
-      if (cards[0]) {
-        mergeCardDetail(cards[0]);
-        renderAfterDetailUpdate(rushId);
-      }
-    })
-  );
+  const detailedCards = await api(`/rest/v1/cards?select=*&rush_id=eq.${encodeURIComponent(rushId)}&order=sort_order.asc`);
+  detailedCards.forEach((card) => mergeCardDetail(card));
 
   state.loadedRushDetails.add(rushId);
   renderAfterDetailUpdate(rushId);
@@ -236,7 +242,9 @@ function refreshLightData() {
       renderHome();
       renderTickets();
       renderProfile();
-      if (isAdmin()) renderAdminClaims();
+      if (isAdmin()) {
+        loadAdminClaims().then(() => renderAdminClaims()).catch(() => showToast("绠＄悊鍚嶅崟鍚屾杈冩參"));
+      }
       updateAdminNav();
     })
     .catch(() => showToast("状态同步较慢，请稍后刷新"));
@@ -322,7 +330,7 @@ function currentTickets() {
 
 function currentClaims() {
   const ids = new Set(currentTickets().map((ticket) => ticket.id));
-  return state.claims.filter((claim) => ids.has(claim.card_id));
+  return state.adminClaims.filter((claim) => ids.has(claim.card_id));
 }
 
 function getTicket(cardId) {
@@ -335,7 +343,7 @@ function getCurrentUserClaims() {
 }
 
 function getCardOwnedCount(cardId) {
-  return state.claims.filter((claim) => claim.card_id === cardId).length;
+  return Number(state.claimCounts[cardId] || 0);
 }
 
 function getRemainingCards(cardId) {
@@ -474,7 +482,7 @@ function renderTickets(isLoadingDetails = false) {
   const rush = getCurrentRush();
   const tickets = currentTickets();
   document.querySelector("#rushTitle").textContent = rush.title;
-  document.querySelector("#grabSummary").textContent = isLoadingDetails ? "正在加载卡片详情..." : `已抢 ${currentClaims().length} 张`;
+  document.querySelector("#grabSummary").textContent = isLoadingDetails ? "正在加载卡片详情..." : `已抢 ${getRushClaimCount(rush.id)} 张`;
   heroBand.style.backgroundImage = rush.hero_image_url
     ? `linear-gradient(100deg, rgba(23, 21, 31, 0.9), rgba(230, 63, 79, 0.75)), url('${rush.hero_image_url}')`
     : "";
@@ -618,6 +626,9 @@ function renderAdmin() {
     .join("");
 
   renderAdminClaims();
+  loadAdminClaims()
+    .then(() => renderAdminClaims())
+    .catch(() => showToast("管理员名单加载较慢，请稍后刷新"));
 }
 
 function renderAdminClaims() {
@@ -645,23 +656,47 @@ function renderAdminClaims() {
     .join("");
 }
 
-function readImageAsDataUrl(file) {
-  return new Promise((resolve) => {
-    if (!file || file.size === 0) {
-      resolve(null);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.addEventListener("load", () => resolve(reader.result));
-    reader.readAsDataURL(file);
-  });
+function getImageExtension(file) {
+  const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (extension) return extension;
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+  return "jpg";
 }
 
-async function readImagesAsDataUrls(files) {
+function buildImagePath(file) {
+  const userPart = String(state.user?.qq || "guest").replace(/[^a-zA-Z0-9_-]/g, "");
+  const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${userPart}/${id}.${getImageExtension(file)}`;
+}
+
+async function uploadImage(file) {
+  if (!file || file.size === 0) return null;
+
+  const path = buildImagePath(file);
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/ticket-images/${path}`, {
+    method: "POST",
+    headers: {
+      apikey: supabaseKey,
+      Authorization: `Bearer ${supabaseKey}`,
+      "Content-Type": file.type || "application/octet-stream",
+      "x-upsert": "false"
+    },
+    body: file
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "图片上传失败");
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/ticket-images/${path}`;
+}
+
+async function uploadImages(files) {
   const selectedFiles = Array.from(files || []).filter((file) => file.size > 0);
   if (selectedFiles.length === 0) return null;
-  return Promise.all(selectedFiles.map((file) => readImageAsDataUrl(file)));
+  return Promise.all(selectedFiles.map((file) => uploadImage(file)));
 }
 
 function updateCarousel(carousel, direction) {
@@ -771,6 +806,7 @@ ticketList.addEventListener("click", async (event) => {
       display_name: state.user.name,
       claimed_at: new Date().toISOString()
     });
+    state.claimCounts[ticketId] = getCardOwnedCount(ticketId) + 1;
     renderHome();
     renderTickets();
     renderProfile();
@@ -786,9 +822,9 @@ ticketList.addEventListener("click", async (event) => {
 document.querySelector("#settingsForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const heroImageFile = document.querySelector("#adminHeroImage").files[0];
-  const heroImageUrl = await readImageAsDataUrl(heroImageFile);
 
   try {
+    const heroImageUrl = await uploadImage(heroImageFile);
     const result = await rpc("update_rush_event", {
       p_admin_qq: state.user.qq,
       p_rush_id: getCurrentRush().id,
@@ -814,9 +850,9 @@ adminTicketList.addEventListener("submit", async (event) => {
   const form = event.target.closest(".admin-ticket-card");
   const ticket = getTicket(form.dataset.ticketId);
   const formData = new FormData(form);
-  const imageUrls = await readImagesAsDataUrls(formData.getAll("image"));
 
   try {
+    const imageUrls = await uploadImages(formData.getAll("image"));
     const result = await rpc("update_card", {
       p_admin_qq: state.user.qq,
       p_card_id: ticket.id,
@@ -877,9 +913,9 @@ adminTicketList.addEventListener("click", async (event) => {
 createCardForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formData = new FormData(createCardForm);
-  const imageUrls = await readImagesAsDataUrls(formData.getAll("image"));
 
   try {
+    const imageUrls = await uploadImages(formData.getAll("image"));
     const result = await rpc("create_card", {
       p_admin_qq: state.user.qq,
       p_rush_id: getCurrentRush().id,
