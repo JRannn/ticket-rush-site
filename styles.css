@@ -345,8 +345,16 @@ input:focus {
 .ticket-image {
   min-height: 170px;
   border-radius: 6px;
+  background-color: #f2edf7;
   background-size: cover;
   background-position: center;
+}
+
+.ticket-image.lazy-bg,
+.ticket-image.deferred-bg {
+  background:
+    linear-gradient(140deg, rgba(49, 88, 221, 0.14), rgba(0, 169, 165, 0.1)),
+    #f2edf7;
 }
 
 .image-placeholder {

@@ -260,6 +260,36 @@ function showLoading(message) {
   rushList.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
 }
 
+function applyLazyBackground(element) {
+  const url = element.dataset.bg;
+  if (!url) return;
+  element.style.backgroundImage = `url('${url}')`;
+  element.classList.add("image-loaded");
+  element.classList.remove("lazy-bg", "deferred-bg");
+  delete element.dataset.bg;
+}
+
+const lazyImageObserver = "IntersectionObserver" in window
+  ? new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        applyLazyBackground(entry.target);
+        lazyImageObserver.unobserve(entry.target);
+      });
+    }, { rootMargin: "300px 0px" })
+  : null;
+
+function queueLazyBackgrounds(root = document) {
+  const lazyImages = root.querySelectorAll(".lazy-bg[data-bg]");
+  lazyImages.forEach((element) => {
+    if (lazyImageObserver) {
+      lazyImageObserver.observe(element);
+    } else {
+      applyLazyBackground(element);
+    }
+  });
+}
+
 async function showApp() {
   const loggedIn = Boolean(state.user);
   loginPage.classList.toggle("active", !loggedIn);
@@ -355,8 +385,7 @@ function getRushTickets(rushId) {
 }
 
 function getRushClaimCount(rushId) {
-  const ticketIds = new Set(getRushTickets(rushId).map((ticket) => ticket.id));
-  return state.claims.filter((claim) => ticketIds.has(claim.card_id)).length;
+  return getRushTickets(rushId).reduce((total, ticket) => total + getCardOwnedCount(ticket.id), 0);
 }
 
 function getRushRemainingCount(rushId) {
@@ -378,8 +407,20 @@ function getTicketImages(ticket) {
   return [...new Set(images)];
 }
 
+function escapeAttribute(value) {
+  return escapeHtml(value).replaceAll("`", "&#096;");
+}
+
 function imageStyle(url) {
   return url ? ` style="background-image: url('${url}')"` : "";
+}
+
+function lazyImageAttributes(url) {
+  return url ? ` data-bg="${escapeAttribute(url)}"` : "";
+}
+
+function lazyImageClass(url) {
+  return url ? " lazy-bg" : "";
 }
 
 function ticketImageMarkup(ticket, className = "ticket-image") {
@@ -390,12 +431,12 @@ function ticketImageMarkup(ticket, className = "ticket-image") {
   }
 
   if (images.length <= 1) {
-    return `<div class="${className} ${ticket.image_class}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${imageStyle(images[0])}></div>`;
+    return `<div class="${className} ${ticket.image_class}${lazyImageClass(images[0])}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${lazyImageAttributes(images[0])}></div>`;
   }
 
   const slides = images
     .map((image, index) => {
-      return `<div class="${className} carousel-slide ${index === 0 ? "active" : ""}" role="img" aria-label="${escapeHtml(ticket.title)}预览图 ${index + 1}"${imageStyle(image)}></div>`;
+      return `<div class="${className} carousel-slide ${index === 0 ? "active lazy-bg" : "deferred-bg"}" role="img" aria-label="${escapeHtml(ticket.title)}预览图 ${index + 1}"${lazyImageAttributes(image)}></div>`;
     })
     .join("");
 
@@ -411,7 +452,7 @@ function ticketImageMarkup(ticket, className = "ticket-image") {
 
 function ticketThumbMarkup(ticket) {
   const image = getTicketImages(ticket)[0];
-  return `<div class="owned-thumb ticket-image ${ticket.image_class}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${imageStyle(image)}></div>`;
+  return `<div class="owned-thumb ticket-image ${ticket.image_class}${lazyImageClass(image)}" role="img" aria-label="${escapeHtml(ticket.title)}预览图"${lazyImageAttributes(image)}></div>`;
 }
 
 function rushPreviewStyle(rush) {
@@ -475,6 +516,7 @@ function renderHome() {
       `;
     })
     .join("");
+  queueLazyBackgrounds(rushList);
 }
 
 function renderTickets(isLoadingDetails = false) {
@@ -519,6 +561,7 @@ function renderTickets(isLoadingDetails = false) {
       `;
     })
     .join("");
+  queueLazyBackgrounds(ticketList);
 }
 
 function updateCountdown() {
@@ -590,6 +633,7 @@ function renderProfile() {
       `;
     })
     .join("");
+  queueLazyBackgrounds(ownedTicketList);
 }
 
 function renderAdmin() {
@@ -623,6 +667,7 @@ function renderAdmin() {
       `;
     })
     .join("");
+  queueLazyBackgrounds(adminTicketList);
 
   renderAdminClaims();
   loadAdminClaims()
@@ -655,6 +700,40 @@ function renderAdminClaims() {
     .join("");
 }
 
+async function compressImage(file, maxSize = 1200, quality = 0.76) {
+  if (!file || file.size === 0 || file.type === "image/gif") return file;
+  if (!file.type.startsWith("image/")) return file;
+
+  const objectUrl = URL.createObjectURL(file);
+  const image = new Image();
+  image.decoding = "async";
+
+  try {
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+      image.src = objectUrl;
+    });
+
+    const scale = Math.min(1, maxSize / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: false });
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", quality));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.webp`, { type: "image/webp" });
+  } catch {
+    return file;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 function getImageExtension(file) {
   const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (extension) return extension;
@@ -672,16 +751,17 @@ function buildImagePath(file) {
 async function uploadImage(file) {
   if (!file || file.size === 0) return null;
 
-  const path = buildImagePath(file);
+  const uploadFile = await compressImage(file);
+  const path = buildImagePath(uploadFile);
   const response = await fetch(`${supabaseUrl}/storage/v1/object/ticket-images/${path}`, {
     method: "POST",
     headers: {
       apikey: supabaseKey,
       Authorization: `Bearer ${supabaseKey}`,
-      "Content-Type": file.type || "application/octet-stream",
+      "Content-Type": uploadFile.type || "application/octet-stream",
       "x-upsert": "false"
     },
-    body: file
+    body: uploadFile
   });
 
   if (!response.ok) {
@@ -708,7 +788,11 @@ function updateCarousel(carousel, direction) {
     : (current - 1 + slides.length) % slides.length;
 
   carousel.dataset.slide = next;
-  slides.forEach((slide, index) => slide.classList.toggle("active", index === next));
+  slides.forEach((slide, index) => {
+    const isActive = index === next;
+    slide.classList.toggle("active", isActive);
+    if (isActive) applyLazyBackground(slide);
+  });
   carousel.querySelector(".carousel-count").textContent = `${next + 1} / ${slides.length}`;
 }
 
