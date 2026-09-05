@@ -197,6 +197,47 @@ drop function if exists public.create_card(text, text, text, text, text, text, t
 drop function if exists public.update_card(text, text, text, text, text, text, text, text, integer);
 drop function if exists public.update_app_settings(text, text, timestamptz, text, integer);
 
+create or replace function public.get_homepage_data(p_qq text default '')
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'rushes',
+    coalesce((
+      select jsonb_agg(to_jsonb(rush) order by rush.sort_order asc)
+      from (
+        select id, title, start_time, max_cards_per_account, admin_qq, sort_order
+        from public.rush_events
+      ) rush
+    ), '[]'::jsonb),
+    'cards',
+    coalesce((
+      select jsonb_agg(to_jsonb(card) order by card.sort_order asc)
+      from (
+        select id, rush_id, title, price, venue, show_time, description, image_class, quota, sort_order
+        from public.cards
+      ) card
+    ), '[]'::jsonb),
+    'claim_counts',
+    coalesce((
+      select jsonb_agg(to_jsonb(card_count))
+      from public.card_claim_counts card_count
+    ), '[]'::jsonb),
+    'user_claims',
+    coalesce((
+      select jsonb_agg(to_jsonb(user_claim) order by user_claim.claimed_at desc)
+      from (
+        select id, card_id, qq, display_name, claimed_at
+        from public.claims
+        where qq = p_qq
+      ) user_claim
+    ), '[]'::jsonb)
+  );
+$$;
+
 create or replace function public.claim_card(p_qq text, p_name text, p_card_id text)
 returns jsonb
 language plpgsql
@@ -476,6 +517,7 @@ end;
 $$;
 
 grant execute on function public.claim_card(text, text, text) to anon;
+grant execute on function public.get_homepage_data(text) to anon;
 grant execute on function public.return_card(uuid, text) to anon;
 grant execute on function public.create_rush_event(text, text, text, timestamptz, integer) to anon;
 grant execute on function public.update_rush_event(text, text, text, timestamptz, text, integer) to anon;

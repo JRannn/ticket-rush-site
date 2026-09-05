@@ -14,6 +14,7 @@ const rampMs = Number(args.get("ramp-ms") || 0);
 const timeoutMs = Number(args.get("timeout-ms") || 15000);
 const supabaseUrl = args.get("supabase-url") || DEFAULT_SUPABASE_URL;
 const supabaseKey = args.get("supabase-key") || DEFAULT_SUPABASE_KEY;
+const mode = args.get("mode") || "rpc";
 
 if (!Number.isFinite(users) || users <= 0) {
   throw new Error("--users must be a positive number");
@@ -75,6 +76,26 @@ async function runVirtualUser(index) {
     requests.push(timedFetch("site:index", `${base}/`));
     requests.push(timedFetch("site:css", `${base}/styles.css`));
     requests.push(timedFetch("site:js", `${base}/script.js`));
+  }
+
+  if (mode === "rpc") {
+    requests.push(
+      timedFetch(
+        "db:homepage-rpc",
+        `${supabaseUrl}/rest/v1/rpc/get_homepage_data`,
+        {
+          method: "POST",
+          headers: supabaseHeaders(),
+          body: JSON.stringify({ p_qq: qq })
+        }
+      )
+    );
+
+    if (rampMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Math.floor((rampMs / users) * index)));
+    }
+
+    return Promise.all(requests);
   }
 
   requests.push(

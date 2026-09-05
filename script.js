@@ -134,14 +134,13 @@ async function rpc(name, body) {
 
 async function loadData() {
   const existingCards = new Map(state.tickets.map((ticket) => [ticket.id, ticket]));
-  const [rushes, cards, claimCounts, userClaims] = await Promise.all([
-    api("/rest/v1/rush_events?select=id,title,start_time,max_cards_per_account,admin_qq,sort_order&order=sort_order.asc"),
-    api("/rest/v1/cards?select=id,rush_id,title,price,venue,show_time,description,image_class,quota,sort_order&order=sort_order.asc"),
-    api("/rest/v1/card_claim_counts?select=card_id,claim_count"),
-    state.user
-      ? api(`/rest/v1/claims?select=*&qq=eq.${encodeURIComponent(state.user.qq)}&order=claimed_at.desc`)
-      : Promise.resolve([])
-  ]);
+  const data = await rpc("get_homepage_data", {
+    p_qq: state.user?.qq || ""
+  });
+  const rushes = data.rushes || [];
+  const cards = data.cards || [];
+  const claimCounts = data.claim_counts || [];
+  const userClaims = data.user_claims || [];
 
   state.rushes = rushes.length
     ? rushes.map((rush) => ({ ...rush, hero_image_url: getCurrentRushImage(rush.id) }))
